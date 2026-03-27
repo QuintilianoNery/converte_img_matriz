@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to Embroidery Converter</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <h1>Image to Embroidery Converter</h1>
+    <p>Please upload a high-quality image.</p>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" name="image" required>
+        <label for="outputSize">Output Size:</label>
+        <select name="outputSize">
+            <option value="10cm">10cm</option>
+            <option value="20cm">20cm</option>
+            <option value="30cm">30cm</option>
+        </select>
+        <label for="outputFormat">Output Format:</label>
+        <select name="outputFormat">
+            <option value="DST">DST</option>
+            <option value="PES">PES</option>
+            <option value="JEF">JEF</option>
+            <option value="EXP">EXP</option>
+            <option value="VP3">VP3</option>
+            <option value="HUS">HUS</option>
+            <option value="E3D">E3D</option>
+        </select>
+        <button type="submit">Convert</button>
+    </form>
+    <div id="previewContainer">
+        <h2>Preview:</h2>
+        <img id="previewImage" src="" alt="Embroidery Preview">
+    </div>
+    <script src="js/app.js"></script>
+</body>
+</html>
