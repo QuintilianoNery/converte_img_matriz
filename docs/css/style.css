@@ -36,6 +36,12 @@ body{
   backdrop-filter: blur(6px);
 }
 
+.card.inner{
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(0,0,0,.2);
+}
+
 .grid{
   display:grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
@@ -64,6 +70,70 @@ body{
   display:flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.editorActions{
+  margin: 10px 0 12px;
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.objectsEditor{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.objItem{
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,.03);
+}
+
+.objHead{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.objHeadLeft{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+.swatch{
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.35);
+}
+
+.objBody{
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.objGrid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px){
+  .objGrid{ grid-template-columns: 1fr; }
+}
+
+.objMeta{
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .btn{

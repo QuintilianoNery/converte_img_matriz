@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -9,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from converter import convert_image_to_embroidery
+from converter import convert_image_to_embroidery, analyze_image_for_autopunch
 
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "output"
@@ -49,6 +50,8 @@ async def convert(
     format: str = Form(...),
     colors: int = Form(...),
     detail: str = Form(...),
+    quality_preset: str = Form("medio"),
+    design_config: str | None = Form(None),
 ):
     job_id = str(uuid.uuid4())
     job_dir = OUTPUT_DIR / job_id
@@ -59,6 +62,13 @@ async def convert(
     with input_path.open("wb") as f:
         f.write(await image.read())
 
+    parsed_design_config = None
+    if design_config:
+        try:
+            parsed_design_config = json.loads(design_config)
+        except json.JSONDecodeError:
+            parsed_design_config = None
+
     # converter
     preview_path, out_path, meta = convert_image_to_embroidery(
         input_image_path=input_path,
@@ -67,6 +77,8 @@ async def convert(
         out_format=format,
         num_colors=colors,
         detail=detail,
+        design_config=parsed_design_config,
+        quality_preset=quality_preset,
     )
 
     return {
@@ -74,6 +86,34 @@ async def convert(
         "preview_url": f"/preview/{job_id}",
         "download_url": f"/download/{job_id}",
         "meta": meta,
+    }
+
+
+@app.post("/autopunch")
+async def autopunch(
+    image: UploadFile = File(...),
+    colors: int = Form(12),
+    detail: str = Form("medium"),
+    quality_preset: str = Form("medio"),
+):
+    job_id = str(uuid.uuid4())
+    job_dir = OUTPUT_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    input_path = job_dir / f"input_{image.filename}"
+    with input_path.open("wb") as f:
+        f.write(await image.read())
+
+    analysis = analyze_image_for_autopunch(
+        input_image_path=input_path,
+        num_colors=colors,
+        detail=detail,
+        quality_preset=quality_preset,
+    )
+
+    return {
+        "job_id": job_id,
+        "analysis": analysis,
     }
 
 @app.get("/preview/{job_id}")

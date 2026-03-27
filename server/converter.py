@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -29,6 +30,77 @@ DETAIL_STEP_MM: dict[DetailLevel, float] = {
 
 SUPPORTED_FORMATS = {"PES", "DST", "JEF", "EXP", "HUS", "VP3"}  # E3D não
 
+FILL_TYPE_ALIASES = {
+    "tatami": "tatami",
+    "ponto de preenchimento": "tatami",
+    "ponto preenchimento": "tatami",
+    "fill": "tatami",
+    "ponto cheio": "satin",
+    "satin": "satin",
+    "ponto de preenchimento prog": "prog_fill",
+    "prog_fill": "prog_fill",
+    "ponto de enfeite": "ornamental",
+    "ponto ornamental": "ornamental",
+    "ornamental": "ornamental",
+    "ponto cruz": "cross",
+    "cross": "cross",
+    "ponto em circulo concentrico": "concentric",
+    "concentrico": "concentric",
+    "concentric": "concentric",
+    "ponto radial": "radial",
+    "radial": "radial",
+    "ponto espiral": "spiral",
+    "espiral": "spiral",
+    "spiral": "spiral",
+    "ponto pontilhado": "stipple",
+    "pontilhado": "stipple",
+    "stipple": "stipple",
+    "ponto de preenchimento em rede": "network",
+    "rede": "network",
+    "network": "network",
+    "ponto de preenchimento em zigzag": "zigzag",
+    "zigzag": "zigzag",
+}
+
+DENSITY_FACTORS = {
+    "low": 1.35,
+    "medium": 1.0,
+    "high": 0.75,
+}
+
+UNDERLAY_FACTORS = {
+    "low": 2.1,
+    "medium": 1.65,
+    "high": 1.25,
+}
+
+QUALITY_PRESETS = {
+    "leve": {
+        "density": "low",
+        "underlay": "low",
+        "shrink_comp_mm": 0.25,
+        "outline": True,
+        "outline_step_mult": 1.2,
+        "border_width_mm": 0.7,
+    },
+    "medio": {
+        "density": "medium",
+        "underlay": "medium",
+        "shrink_comp_mm": 0.4,
+        "outline": True,
+        "outline_step_mult": 1.0,
+        "border_width_mm": 0.9,
+    },
+    "premium": {
+        "density": "high",
+        "underlay": "high",
+        "shrink_comp_mm": 0.5,
+        "outline": True,
+        "outline_step_mult": 0.75,
+        "border_width_mm": 1.15,
+    },
+}
+
 @dataclass
 class ConvertMeta:
     width_px: int
@@ -38,6 +110,52 @@ class ConvertMeta:
     num_colors: int
     detail: str
     out_format: str
+
+
+def _normalize_fill_type(value: str | None) -> str:
+    if not value:
+        return "tatami"
+    key = str(value).strip().lower()
+    return FILL_TYPE_ALIASES.get(key, "tatami")
+
+
+def _normalize_quality_preset(value: str | None) -> str:
+    if not value:
+        return "medio"
+    v = str(value).strip().lower()
+    if v in QUALITY_PRESETS:
+        return v
+    if v == "médio":
+        return "medio"
+    return "medio"
+
+
+def _parse_hex_color(value: str | None):
+    if not value:
+        return None
+    s = value.strip().lstrip("#")
+    if len(s) == 3:
+        s = "".join(ch * 2 for ch in s)
+    if len(s) != 6:
+        return None
+    try:
+        return (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+    except ValueError:
+        return None
+
+
+def _as_bool(value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in {"1", "true", "sim", "yes", "y", "on"}:
+            return True
+        if v in {"0", "false", "nao", "não", "no", "n", "off"}:
+            return False
+    return default
 
 
 def _kmeans_colors(pixels: np.ndarray, k: int, iters: int = 12, seed: int = 42):
@@ -130,9 +248,287 @@ def _vectorize_and_group_rgba(
     return centers_u8, label_img, opaque_mask
 
 
-def _make_segments_for_mask(mask: np.ndarray, mm_per_px: float, step_mm: float):
+def _find_components(mask: np.ndarray, min_area_px: int = 36):
+    """Connected components 4-neighborhood returning metadata per object."""
+    H, W = mask.shape
+    visited = np.zeros_like(mask, dtype=bool)
+    object_map = np.full((H, W), -1, dtype=np.int32)
+    objects = []
+    next_id = 0
+
+    for y in range(H):
+        for x in range(W):
+            if not mask[y, x] or visited[y, x]:
+                continue
+
+            q = deque([(y, x)])
+            visited[y, x] = True
+            pixels = []
+            minx = maxx = x
+            miny = maxy = y
+
+            while q:
+                cy, cx = q.popleft()
+                pixels.append((cy, cx))
+                if cx < minx:
+                    minx = cx
+                if cx > maxx:
+                    maxx = cx
+                if cy < miny:
+                    miny = cy
+                if cy > maxy:
+                    maxy = cy
+
+                for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
+                    if ny < 0 or ny >= H or nx < 0 or nx >= W:
+                        continue
+                    if visited[ny, nx] or not mask[ny, nx]:
+                        continue
+                    visited[ny, nx] = True
+                    q.append((ny, nx))
+
+            area = len(pixels)
+            if area < min_area_px:
+                continue
+
+            for py, px in pixels:
+                object_map[py, px] = next_id
+
+            objects.append(
+                {
+                    "id": next_id,
+                    "area_px": area,
+                    "bbox": [int(minx), int(miny), int(maxx), int(maxy)],
+                }
+            )
+            next_id += 1
+
+    return objects, object_map
+
+
+def analyze_image_for_autopunch(
+    input_image_path: Path,
+    num_colors: int,
+    detail: str = "medium",
+    quality_preset: str = "medio",
+):
+    """Retorna objetos agrupados com configuração inicial editável."""
+    quality_preset = _normalize_quality_preset(quality_preset)
+    preset = QUALITY_PRESETS[quality_preset]
+
+    img = Image.open(input_image_path).convert("RGBA")
+    max_side = 900
+    if max(img.size) > max_side:
+        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+
+    centers_u8, label_img, opaque_mask = _vectorize_and_group_rgba(img, num_colors=num_colors)
+
+    labels_used = label_img[opaque_mask]
+    counts = np.bincount(labels_used, minlength=int(centers_u8.shape[0]))
+    order = np.argsort(-counts)
+
+    out_objects = []
+    for ci in order.tolist():
+        if ci < 0 or counts[ci] == 0:
+            continue
+        color_mask = label_img == int(ci)
+        comps, _ = _find_components(color_mask)
+        r, g, b = map(int, centers_u8[ci])
+        for comp in comps:
+            oid = f"c{ci}_o{comp['id']}"
+            out_objects.append(
+                {
+                    "id": oid,
+                    "label_index": int(ci),
+                    "bbox": comp["bbox"],
+                    "area_px": comp["area_px"],
+                    "enabled": True,
+                    "color": f"#{r:02x}{g:02x}{b:02x}",
+                    "fill_type": "tatami",
+                    "density": preset["density"],
+                    "shrink_comp_mm": float(preset["shrink_comp_mm"]),
+                    "underlay": preset["underlay"],
+                }
+            )
+
+    return {
+        "objects": out_objects,
+        "defaults": {
+            "fill_type": "tatami",
+            "density": preset["density"],
+            "shrink_comp_mm": float(preset["shrink_comp_mm"]),
+            "underlay": preset["underlay"],
+            "quality_preset": quality_preset,
+            "detail": detail,
+        },
+        "image_size": {"width": img.size[0], "height": img.size[1]},
+    }
+
+
+def _dilate_once(mask: np.ndarray):
+    p = np.pad(mask, 1, mode="constant", constant_values=False)
+    return (
+        p[1:-1, 1:-1]
+        | p[:-2, 1:-1]
+        | p[2:, 1:-1]
+        | p[1:-1, :-2]
+        | p[1:-1, 2:]
+        | p[:-2, :-2]
+        | p[:-2, 2:]
+        | p[2:, :-2]
+        | p[2:, 2:]
+    )
+
+
+def _erode_once(mask: np.ndarray):
+    p = np.pad(mask, 1, mode="constant", constant_values=False)
+    return (
+        p[1:-1, 1:-1]
+        & p[:-2, 1:-1]
+        & p[2:, 1:-1]
+        & p[1:-1, :-2]
+        & p[1:-1, 2:]
+        & p[:-2, :-2]
+        & p[:-2, 2:]
+        & p[2:, :-2]
+        & p[2:, 2:]
+    )
+
+
+def _erode_n(mask: np.ndarray, iterations: int):
+    out = mask.copy()
+    for _ in range(max(0, iterations)):
+        out = _erode_once(out)
+        if not out.any():
+            break
+    return out
+
+
+def _boundary_mask(mask: np.ndarray):
+    er = _erode_once(mask)
+    return mask & (~er)
+
+
+def _neighbors8(pt: tuple[int, int]):
+    y, x = pt
+    return (
+        (y - 1, x - 1),
+        (y - 1, x),
+        (y - 1, x + 1),
+        (y, x - 1),
+        (y, x + 1),
+        (y + 1, x - 1),
+        (y + 1, x),
+        (y + 1, x + 1),
+    )
+
+
+def _trace_boundary_polylines(boundary_mask: np.ndarray, min_len_px: int = 8):
+    """Trace connected boundary pixels into ordered polyline paths."""
+    comps, comp_map = _find_components(boundary_mask, min_area_px=max(8, min_len_px))
+    polylines: list[list[tuple[int, int]]] = []
+
+    for comp in comps:
+        cid = int(comp["id"])
+        ys, xs = np.where(comp_map == cid)
+        if ys.size < min_len_px:
+            continue
+
+        points = {(int(y), int(x)) for y, x in zip(ys.tolist(), xs.tolist())}
+        if not points:
+            continue
+
+        degree = {}
+        for p in points:
+            degree[p] = sum(1 for n in _neighbors8(p) if n in points)
+
+        remaining = set(points)
+        while remaining:
+            endpoints = [p for p in remaining if degree.get(p, 0) <= 1]
+            start = endpoints[0] if endpoints else min(remaining)
+
+            path = [start]
+            remaining.remove(start)
+            prev = None
+            cur = start
+
+            while True:
+                candidates = [n for n in _neighbors8(cur) if n in points and n != prev]
+                if not candidates:
+                    break
+
+                # Prefer unvisited neighbor and smoother continuation.
+                unvisited = [n for n in candidates if n in remaining]
+                if not unvisited:
+                    break
+
+                if prev is None:
+                    nxt = min(unvisited)
+                else:
+                    vy = cur[0] - prev[0]
+                    vx = cur[1] - prev[1]
+
+                    def _score(pt):
+                        dy = pt[0] - cur[0]
+                        dx = pt[1] - cur[1]
+                        return (vx * dx + vy * dy, -abs(dx), -abs(dy))
+
+                    nxt = max(unvisited, key=_score)
+
+                path.append(nxt)
+                remaining.remove(nxt)
+                prev, cur = cur, nxt
+
+            if len(path) >= min_len_px:
+                polylines.append(path)
+
+    return polylines
+
+
+def _vector_outline_segments(boundary_mask: np.ndarray, mm_per_px: float, step_mm: float):
+    """Create segments from traced vector-like contour paths."""
+    if not boundary_mask.any():
+        return []
+
+    step_px = max(1, int(round(step_mm / max(mm_per_px, 1e-6))))
+    polylines = _trace_boundary_polylines(boundary_mask, min_len_px=max(8, step_px * 2))
+    segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
+
+    for path in polylines:
+        sampled = path[::step_px]
+        if sampled[-1] != path[-1]:
+            sampled.append(path[-1])
+        if len(sampled) < 2:
+            continue
+
+        for i in range(len(sampled) - 1):
+            y0, x0 = sampled[i]
+            y1, x1 = sampled[i + 1]
+            segments_mm.append(((x0 * mm_per_px, y0 * mm_per_px), (x1 * mm_per_px, y1 * mm_per_px)))
+
+        # Close loops when ends are near each other.
+        y0, x0 = sampled[0]
+        y1, x1 = sampled[-1]
+        if math.hypot(x1 - x0, y1 - y0) <= max(2.0, step_px * 1.5):
+            segments_mm.append(((x1 * mm_per_px, y1 * mm_per_px), (x0 * mm_per_px, y0 * mm_per_px)))
+
+    return segments_mm
+
+
+def _apply_shrink_comp(mask: np.ndarray, mm_per_px: float, shrink_comp_mm: float):
+    if shrink_comp_mm <= 0:
+        return mask
+    iterations = int(max(0, round(shrink_comp_mm / max(mm_per_px, 1e-6))))
+    out = mask.copy()
+    for _ in range(iterations):
+        out = _dilate_once(out)
+    return out
+
+
+def _make_segments_for_mask(mask: np.ndarray, mm_per_px: float, step_mm: float, fill_type: str = "tatami"):
     """Gera preenchimento tipo tatami curto (segmentos diagonais curtos)."""
     H, W = mask.shape
+    fill_type = _normalize_fill_type(fill_type)
     step_px = max(1, int(round(step_mm / mm_per_px)))
     segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
 
@@ -150,11 +546,36 @@ def _make_segments_for_mask(mask: np.ndarray, mm_per_px: float, step_mm: float):
     short_stitch_px = max(2, int(round(2.2 / mm_per_px)))
     slant_px = max(1, step_px // 2)
 
+    if fill_type in {"ornamental", "stipple"}:
+        short_stitch_px = max(1, short_stitch_px // 2)
+    elif fill_type == "satin":
+        short_stitch_px = max(3, int(round(3.2 / mm_per_px)))
+        step_px = max(1, int(round(step_px * 0.8)))
+    elif fill_type == "prog_fill":
+        step_px = max(1, int(round(step_px * 0.85)))
+    elif fill_type == "zigzag":
+        slant_px = max(2, step_px)
+
     # Duas passadas com ângulos opostos para textura mais natural.
-    passes = [
-        (step_px, slant_px, 0, 3),
-        (max(step_px * 2, 1), -slant_px, max(1, step_px // 2), 2),
-    ]
+    if fill_type in {"cross", "network"}:
+        passes = [
+            (step_px, slant_px, 0, 3),
+            (max(step_px, 1), -slant_px, max(1, step_px // 2), 2),
+            (max(step_px * 2, 1), 0, max(1, step_px // 3), 2),
+        ]
+    elif fill_type in {"radial", "concentric", "spiral", "ornamental", "stipple"}:
+        passes = [
+            (step_px, slant_px, 0, 3),
+        ]
+    else:
+        passes = [
+            (step_px, slant_px, 0, 3),
+            (max(step_px * 2, 1), -slant_px, max(1, step_px // 2), 2),
+        ]
+
+    ys, xs = np.where(mask)
+    cx = float(xs.mean()) if xs.size else 0.0
+    cy = float(ys.mean()) if ys.size else 0.0
 
     for pass_step, pass_slant, y_offset, phase_div in passes:
         for y in range(y_offset, H, pass_step):
@@ -183,11 +604,23 @@ def _make_segments_for_mask(mask: np.ndarray, mm_per_px: float, step_mm: float):
                     while x > x0:
                         xa = int(np.clip(x, x0, x1))
                         xb = int(np.clip(x - short_stitch_px, x0, x1))
-                        yb = int(np.clip(
-                            y + (pass_slant if ((x // max(1, short_stitch_px)) % 2 == 0) else -pass_slant),
-                            0,
-                            H - 1,
-                        ))
+                        yb = int(np.clip(y + (pass_slant if ((x // max(1, short_stitch_px)) % 2 == 0) else -pass_slant), 0, H - 1))
+                        if fill_type in {"radial", "concentric", "spiral", "ornamental", "stipple"}:
+                            ang = math.atan2(y - cy, xa - cx)
+                            if fill_type == "radial":
+                                ang = ang
+                            elif fill_type == "concentric":
+                                ang = ang + math.pi / 2.0
+                            elif fill_type == "spiral":
+                                r = math.hypot(xa - cx, y - cy)
+                                ang = ang + (r * 0.02)
+                            elif fill_type == "ornamental":
+                                ang = ang + (((xa + y) % 11) - 5) * 0.08
+                            else:  # stipple
+                                h = (xa * 73856093) ^ (y * 19349663)
+                                ang = (h % 360) * math.pi / 180.0
+                            xb = int(np.clip(xa + math.cos(ang) * short_stitch_px, x0, x1))
+                            yb = int(np.clip(y + math.sin(ang) * short_stitch_px, 0, H - 1))
                         if not mask[yb, xb]:
                             yb = y
                         segments_mm.append(((xa * mm_per_px, y * mm_per_px), (xb * mm_per_px, yb * mm_per_px)))
@@ -197,11 +630,23 @@ def _make_segments_for_mask(mask: np.ndarray, mm_per_px: float, step_mm: float):
                     while x < x1:
                         xa = int(np.clip(x, x0, x1))
                         xb = int(np.clip(x + short_stitch_px, x0, x1))
-                        yb = int(np.clip(
-                            y + (pass_slant if ((x // max(1, short_stitch_px)) % 2 == 0) else -pass_slant),
-                            0,
-                            H - 1,
-                        ))
+                        yb = int(np.clip(y + (pass_slant if ((x // max(1, short_stitch_px)) % 2 == 0) else -pass_slant), 0, H - 1))
+                        if fill_type in {"radial", "concentric", "spiral", "ornamental", "stipple"}:
+                            ang = math.atan2(y - cy, xa - cx)
+                            if fill_type == "radial":
+                                ang = ang
+                            elif fill_type == "concentric":
+                                ang = ang + math.pi / 2.0
+                            elif fill_type == "spiral":
+                                r = math.hypot(xa - cx, y - cy)
+                                ang = ang + (r * 0.02)
+                            elif fill_type == "ornamental":
+                                ang = ang + (((xa + y) % 11) - 5) * 0.08
+                            else:  # stipple
+                                h = (xa * 73856093) ^ (y * 19349663)
+                                ang = (h % 360) * math.pi / 180.0
+                            xb = int(np.clip(xa + math.cos(ang) * short_stitch_px, x0, x1))
+                            yb = int(np.clip(y + math.sin(ang) * short_stitch_px, 0, H - 1))
                         if not mask[yb, xb]:
                             yb = y
                         segments_mm.append(((xa * mm_per_px, y * mm_per_px), (xb * mm_per_px, yb * mm_per_px)))
@@ -217,6 +662,8 @@ def convert_image_to_embroidery(
     out_format: str,
     num_colors: int,
     detail: str,
+    design_config: dict | None = None,
+    quality_preset: str = "medio",
 ):
     out_format = out_format.upper().replace(".", "")
     if out_format == "E3D":
@@ -228,6 +675,8 @@ def convert_image_to_embroidery(
     if detail not in DETAIL_STEP_MM:
         detail = "medium"
     step_mm = DETAIL_STEP_MM[detail]  # tipo: ignore[index]
+
+    quality_preset = _normalize_quality_preset(quality_preset)
 
     # carregar imagem (preservando alpha para não bordar o fundo transparente)
     img = Image.open(input_image_path).convert("RGBA")
@@ -255,14 +704,71 @@ def convert_image_to_embroidery(
     counts = np.bincount(labels_used, minlength=int(centers_u8.shape[0]))
     order = np.argsort(-counts)
 
+    # Quebrar cada cor em objetos/ilhas para permitir edição objeto a objeto.
+    default_objects = []
+    for ci in order.tolist():
+        if ci < 0 or counts[ci] == 0:
+            continue
+        comps, comp_map = _find_components(label_img == int(ci))
+        r, g, b = map(int, centers_u8[ci])
+        for comp in comps:
+            oid = f"c{ci}_o{comp['id']}"
+            default_objects.append(
+                {
+                    "id": oid,
+                    "label_index": int(ci),
+                    "component_index": int(comp["id"]),
+                    "bbox": comp["bbox"],
+                    "area_px": comp["area_px"],
+                    "enabled": True,
+                    "color": f"#{r:02x}{g:02x}{b:02x}",
+                    "fill_type": "tatami",
+                    "density": "medium",
+                    "shrink_comp_mm": 0.4,
+                    "underlay": "medium",
+                    "_component_map": comp_map,
+                }
+            )
+
+    cfg_global = (design_config or {}).get("global", {}) if isinstance(design_config, dict) else {}
+    preset_name = _normalize_quality_preset(cfg_global.get("quality_preset", quality_preset))
+    preset = QUALITY_PRESETS[preset_name]
+    cfg_objects = (design_config or {}).get("objects", []) if isinstance(design_config, dict) else []
+    cfg_by_id = {str(o.get("id")): o for o in cfg_objects if isinstance(o, dict) and "id" in o}
+
+    global_density = str(cfg_global.get("density", preset["density"])).lower()
+    global_underlay = str(cfg_global.get("underlay", preset["underlay"])).lower()
+    global_shrink = float(cfg_global.get("shrink_comp_mm", preset["shrink_comp_mm"]))
+    global_outline = bool(cfg_global.get("outline", preset["outline"]))
+    global_outline_mult = float(cfg_global.get("outline_step_mult", preset["outline_step_mult"]))
+    global_border_width_mm = float(cfg_global.get("border_width_mm", preset["border_width_mm"]))
+
+    objects = []
+    for obj in default_objects:
+        o = obj.copy()
+        user_o = cfg_by_id.get(o["id"], {})
+        if isinstance(user_o, dict):
+            o["enabled"] = _as_bool(user_o.get("enabled", o["enabled"]), bool(o["enabled"]))
+            o["fill_type"] = _normalize_fill_type(user_o.get("fill_type", o["fill_type"]))
+            o["density"] = str(user_o.get("density", o["density"])).lower()
+            o["underlay"] = str(user_o.get("underlay", o["underlay"])).lower()
+            o["shrink_comp_mm"] = float(user_o.get("shrink_comp_mm", o["shrink_comp_mm"]))
+            o["color"] = str(user_o.get("color", o["color"]))
+            o["outline"] = _as_bool(user_o.get("outline", global_outline), global_outline)
+            o["border_width_mm"] = float(user_o.get("border_width_mm", global_border_width_mm))
+        objects.append(o)
+
     pattern = EmbPattern()
 
-    # adicionar uma cor “inicial” para o primeiro bloco
-    # (pyembroidery usa threadlist; aqui colocamos RGB aproximado como metadado)
-    # Vamos inserir as cores na ordem em que vamos bordar.
-    for ci in order:
-        r, g, b = map(int, centers_u8[ci])
-        pattern.add_thread({"color": (r << 16) | (g << 8) | b, "description": f"c{ci}"})
+    # Criar threadlist na ordem de objetos habilitados (objeto a objeto).
+    enabled_objects = [o for o in objects if o.get("enabled", True)]
+    for o in enabled_objects:
+        rgb = _parse_hex_color(o.get("color"))
+        if rgb is None:
+            ci = int(o["label_index"])
+            rgb = tuple(map(int, centers_u8[ci]))
+        r, g, b = rgb
+        pattern.add_thread({"color": (r << 16) | (g << 8) | b, "description": str(o["id"])})
 
     # gerar stitches por cor
     first_color = True
@@ -272,14 +778,75 @@ def convert_image_to_embroidery(
     cursor_x = 0.0
     cursor_y = 0.0
 
-    for oi, ci in enumerate(order):
+    for oi, obj in enumerate(enabled_objects):
+        ci = int(obj["label_index"])
         if counts[ci] == 0:
             continue
 
-        # máscara da cor
-        mask = label_img == int(ci)
+        comp_map = obj.get("_component_map")
+        if not isinstance(comp_map, np.ndarray):
+            continue
+        comp_idx = int(obj.get("component_index", -1))
+        mask = comp_map == comp_idx
+        if not mask.any():
+            continue
 
-        segments = _make_segments_for_mask(mask, mm_per_px=mm_per_px, step_mm=step_mm)
+        density = str(obj.get("density", global_density)).lower()
+        density_factor = DENSITY_FACTORS.get(density, DENSITY_FACTORS["medium"])
+        step_obj_mm = step_mm * density_factor
+
+        shrink_comp_mm = float(obj.get("shrink_comp_mm", global_shrink))
+        mask = _apply_shrink_comp(mask, mm_per_px=mm_per_px, shrink_comp_mm=shrink_comp_mm)
+
+        underlay = str(obj.get("underlay", global_underlay)).lower()
+        underlay_factor = UNDERLAY_FACTORS.get(underlay, UNDERLAY_FACTORS["medium"])
+
+        fill_type = _normalize_fill_type(str(obj.get("fill_type", "tatami")))
+        border_width_mm = float(obj.get("border_width_mm", global_border_width_mm))
+        border_px = max(1, int(round(border_width_mm / max(mm_per_px, 1e-6))))
+
+        inner_mask = _erode_n(mask, border_px)
+        border_mask = mask & (~inner_mask)
+        outline_mask = _boundary_mask(mask)
+
+        underlay_segments = _make_segments_for_mask(
+            inner_mask if inner_mask.any() else mask,
+            mm_per_px=mm_per_px,
+            step_mm=step_obj_mm * underlay_factor,
+            fill_type="zigzag" if fill_type != "zigzag" else "tatami",
+        )
+
+        # Auto comercial: satin na borda + tatami no miolo quando fill padrão.
+        if fill_type == "tatami":
+            core_segments = _make_segments_for_mask(
+                inner_mask if inner_mask.any() else mask,
+                mm_per_px=mm_per_px,
+                step_mm=step_obj_mm,
+                fill_type="tatami",
+            )
+            border_segments = _make_segments_for_mask(
+                border_mask if border_mask.any() else outline_mask,
+                mm_per_px=mm_per_px,
+                step_mm=max(step_obj_mm * 0.9, 0.2),
+                fill_type="satin",
+            )
+            segments = underlay_segments + core_segments + border_segments
+        else:
+            segments = _make_segments_for_mask(
+                mask,
+                mm_per_px=mm_per_px,
+                step_mm=step_obj_mm,
+                fill_type=fill_type,
+            )
+            segments = underlay_segments + segments
+
+        if bool(obj.get("outline", global_outline)):
+            outline_segments = _vector_outline_segments(
+                outline_mask,
+                mm_per_px=mm_per_px,
+                step_mm=max(step_obj_mm * global_outline_mult, 0.18),
+            )
+            segments = segments + outline_segments
         if not segments:
             continue
 
@@ -334,5 +901,6 @@ def convert_image_to_embroidery(
     ).__dict__
     meta["total_stitches_approx"] = total_stitches
     meta["step_mm"] = step_mm
+    meta["quality_preset"] = preset_name
 
     return preview_path, out_path, meta

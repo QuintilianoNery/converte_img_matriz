@@ -20,6 +20,7 @@
 
     <section class="card">
       <form id="converterForm">
+        <h3>Passo 1: Configuração base</h3>
         <div class="grid">
           <div class="field">
             <label for="image">Imagem</label>
@@ -73,6 +74,16 @@
           </div>
 
           <div class="field">
+            <label for="qualityPreset">Preset de qualidade</label>
+            <select id="qualityPreset" name="qualityPreset">
+              <option value="leve">Leve</option>
+              <option value="medio" selected>Médio</option>
+              <option value="premium">Premium</option>
+            </select>
+            <small>Controla contorno, compensação e equilíbrio de densidade.</small>
+          </div>
+
+          <div class="field">
             <label for="apiBase">API (backend)</label>
             <input id="apiBase" type="text" />
             <small>
@@ -82,7 +93,21 @@
         </div>
 
         <div class="actions">
-          <button class="btn" type="submit" id="btnConvert">Converter</button>
+          <button class="btn secondary" type="button" id="btnAutoPunch">Perfuração automática</button>
+        </div>
+
+        <section class="card inner" id="editorCard" hidden>
+          <h3>Passo 2: Ajustar objetos</h3>
+          <p class="muted">Edite objeto por objeto: cor, tipo de preenchimento, densidade, compensação e sob-costura.</p>
+          <div class="editorActions">
+            <button class="btn secondary" type="button" id="btnExpandAll">Expandir tudo</button>
+            <button class="btn secondary" type="button" id="btnCollapseAll">Recolher tudo</button>
+          </div>
+          <div id="objectsEditor" class="objectsEditor"></div>
+        </section>
+
+        <div class="actions">
+          <button class="btn" type="submit" id="btnConvert">Passo 3: Converter</button>
           <button class="btn secondary" type="button" id="btnReset" disabled>Limpar</button>
         </div>
 
@@ -108,7 +133,7 @@
 
     <footer class="footer">
       <p class="muted">
-        Observação: esta versão usa um método automático simplificado para gerar pontos (fill por linhas).
+        Fluxo: perfuração automática → edição de objetos → conversão.
       </p>
     </footer>
   </main>
