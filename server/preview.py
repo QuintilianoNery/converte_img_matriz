@@ -6,9 +6,43 @@ from PIL import Image, ImageDraw
 
 from pyembroidery import (
     STITCH,
+    JUMP,
     COLOR_CHANGE,
+    COMMAND_MASK,
     EmbPattern,
 )
+
+
+def _thread_to_rgb(thread) -> tuple[int, int, int]:
+    """Convert pyembroidery thread-like values to an RGB tuple."""
+    if thread is None:
+        return (255, 255, 255)
+
+    color = getattr(thread, "color", None)
+    if color is None and isinstance(thread, dict):
+        color = thread.get("color", thread.get("rgb"))
+
+    if isinstance(color, int):
+        return ((color >> 16) & 255, (color >> 8) & 255, color & 255)
+
+    if isinstance(color, (tuple, list)) and len(color) >= 3:
+        return (int(color[0]) & 255, int(color[1]) & 255, int(color[2]) & 255)
+
+    if isinstance(color, str):
+        hex_color = color.lstrip("#")
+        if len(hex_color) in (3, 4):
+            hex_color = "".join(ch * 2 for ch in hex_color[:3])
+        if len(hex_color) >= 6:
+            try:
+                return (
+                    int(hex_color[0:2], 16),
+                    int(hex_color[2:4], 16),
+                    int(hex_color[4:6], 16),
+                )
+            except ValueError:
+                pass
+
+    return (255, 255, 255)
 
 
 def render_preview(
@@ -21,26 +55,26 @@ def render_preview(
     Render simples do caminho de pontos (linhas), com limite de tamanho para não estourar memória.
     - max_size_px limita largura/altura do preview
     """
-    # Coletar pontos absolutos por cor
-    x = 0.0
-    y = 0.0
-    points_by_color: list[list[tuple[float, float]]] = [[]]
+    # Coletar trilhas por cor usando coordenadas absolutas.
+    points_by_color: list[list[list[tuple[float, float]]]] = [[[]]]
 
-    # pattern.stitches normalmente é lista de (dx, dy, cmd) em coordenadas relativas
     for stitch in pattern.stitches:
-        cmd = stitch[2]
+        cmd = stitch[2] & COMMAND_MASK
         if cmd == COLOR_CHANGE:
-            points_by_color.append([])
+            points_by_color.append([[]])
+            continue
+        if cmd == JUMP:
+            if points_by_color[-1][-1]:
+                points_by_color[-1].append([])
+            points_by_color[-1][-1].append((float(stitch[0]), float(stitch[1])))
             continue
         if cmd != STITCH:
             continue
-        dx = float(stitch[0])
-        dy = float(stitch[1])
-        x += dx
-        y += dy
-        points_by_color[-1].append((x, y))
+        x = float(stitch[0])
+        y = float(stitch[1])
+        points_by_color[-1][-1].append((x, y))
 
-    all_points = [p for layer in points_by_color for p in layer]
+    all_points = [p for layer in points_by_color for path in layer for p in path]
     if len(all_points) < 2:
         img = Image.new("RGB", (800, 600), (11, 18, 32))
         img.save(out_path)
@@ -79,11 +113,7 @@ def render_preview(
     # Tentar pegar cores do threadlist
     thread_colors = []
     for th in getattr(pattern, "threadlist", []) or []:
-        c = th.get("color", 0xFFFFFF)
-        r = (c >> 16) & 255
-        g = (c >> 8) & 255
-        b = c & 255
-        thread_colors.append((r, g, b))
+        thread_colors.append(_thread_to_rgb(th))
 
     def map_pt(px, py):
         X = int((px - minx) * scale_auto) + pad
@@ -91,10 +121,11 @@ def render_preview(
         return (X, Y)
 
     for i, layer in enumerate(points_by_color):
-        if len(layer) < 2:
-            continue
         color = thread_colors[i] if i < len(thread_colors) else (90, 160, 255)
-        mapped = [map_pt(px, py) for (px, py) in layer]
-        draw.line(mapped, fill=color, width=2)
+        for path in layer:
+            if len(path) < 2:
+                continue
+            mapped = [map_pt(px, py) for (px, py) in path]
+            draw.line(mapped, fill=color, width=2)
 
     img.save(out_path)
