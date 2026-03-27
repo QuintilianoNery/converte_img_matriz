@@ -29,14 +29,27 @@ const btnReset = el("btnReset");
 const btnAutoPunch = el("btnAutoPunch");
 const btnExpandAll = el("btnExpandAll");
 const btnCollapseAll = el("btnCollapseAll");
+const btnApplyBulk = el("btnApplyBulk");
 const editorCard = el("editorCard");
 const objectsEditor = el("objectsEditor");
+const objectFilter = el("objectFilter");
+const objectsCount = el("objectsCount");
+const bulkFillType = el("bulkFillType");
+const bulkDensity = el("bulkDensity");
+const bulkUnderlay = el("bulkUnderlay");
+const bulkShrink = el("bulkShrink");
 const apiBaseInput = el("apiBase");
 const qualityAlert = el("qualityAlert");
 
 apiBaseInput.value = DEFAULT_API_BASE_URL;
 
 let autoPunchModel = null;
+
+if (bulkFillType) {
+  bulkFillType.innerHTML = FILL_OPTIONS.map(([value, label]) => (`
+    <option value="${value}" ${value === "tatami" ? "selected" : ""}>${esc(label)}</option>
+  `)).join("");
+}
 
 function setStatus(msg, kind = "info") {
   statusEl.textContent = msg || "";
@@ -133,6 +146,34 @@ function renderObjectsEditor() {
 
   objectsEditor.innerHTML = html;
   editorCard.hidden = false;
+  applyObjectFilter();
+}
+
+function applyObjectFilter() {
+  const q = (objectFilter?.value || "").trim().toLowerCase();
+  const cards = [...objectsEditor.querySelectorAll("details.objItem")];
+  let visible = 0;
+  cards.forEach((card) => {
+    const id = (card.getAttribute("data-id") || "").toLowerCase();
+    const show = !q || id.includes(q);
+    card.classList.toggle("hiddenByFilter", !show);
+    if (show) visible += 1;
+  });
+  if (objectsCount) {
+    objectsCount.textContent = `${visible} visíveis / ${cards.length} objetos`;
+  }
+}
+
+function applyBulkToAllObjects() {
+  if (!autoPunchModel?.analysis?.objects?.length) return;
+  readEditorIntoModel();
+  autoPunchModel.analysis.objects.forEach((obj) => {
+    obj.fill_type = bulkFillType?.value || obj.fill_type;
+    obj.density = bulkDensity?.value || obj.density;
+    obj.underlay = bulkUnderlay?.value || obj.underlay;
+    obj.shrink_comp_mm = Number(bulkShrink?.value || obj.shrink_comp_mm || 0.4);
+  });
+  renderObjectsEditor();
 }
 
 function readEditorIntoModel() {
@@ -196,6 +237,15 @@ btnExpandAll?.addEventListener("click", () => {
 
 btnCollapseAll?.addEventListener("click", () => {
   objectsEditor.querySelectorAll("details.objItem").forEach((d) => { d.open = false; });
+});
+
+btnApplyBulk?.addEventListener("click", () => {
+  applyBulkToAllObjects();
+  setStatus("Ajustes globais aplicados aos objetos.", "ok");
+});
+
+objectFilter?.addEventListener("input", () => {
+  applyObjectFilter();
 });
 
 el("image").addEventListener("change", async (e) => {

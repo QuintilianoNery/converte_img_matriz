@@ -99,6 +99,46 @@
         <section class="card inner" id="editorCard" hidden>
           <h3>Passo 2: Ajustar objetos</h3>
           <p class="muted">Edite objeto por objeto: cor, tipo de preenchimento, densidade, compensação e sob-costura.</p>
+          <div class="bulkPanel">
+            <h4>Ajuste rápido global</h4>
+            <div class="objGrid bulkGrid">
+              <label class="field">
+                <span>Preenchimento</span>
+                <select id="bulkFillType"></select>
+              </label>
+              <label class="field">
+                <span>Densidade</span>
+                <select id="bulkDensity">
+                  <option value="low">Baixa</option>
+                  <option value="medium" selected>Média</option>
+                  <option value="high">Alta</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Sob-costura</span>
+                <select id="bulkUnderlay">
+                  <option value="low">Baixa</option>
+                  <option value="medium" selected>Média</option>
+                  <option value="high">Alta</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Compensação (mm)</span>
+                <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" />
+              </label>
+            </div>
+            <div class="editorActions">
+              <button class="btn secondary" type="button" id="btnApplyBulk">Aplicar em todos</button>
+            </div>
+          </div>
+
+          <div class="editorTopBar">
+            <label class="field filterField">
+              <span>Buscar objeto</span>
+              <input id="objectFilter" type="text" placeholder="Ex: c3_o2" />
+            </label>
+            <div class="objMeta" id="objectsCount"></div>
+          </div>
           <div class="editorActions">
             <button class="btn secondary" type="button" id="btnExpandAll">Expandir tudo</button>
             <button class="btn secondary" type="button" id="btnCollapseAll">Recolher tudo</button>

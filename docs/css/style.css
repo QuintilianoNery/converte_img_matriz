@@ -79,6 +79,39 @@ body{
   flex-wrap: wrap;
 }
 
+.bulkPanel{
+  margin: 10px 0;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,.02);
+}
+
+.bulkPanel h4{
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.bulkGrid{
+  grid-template-columns: repeat(4, minmax(0,1fr));
+}
+
+.editorTopBar{
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.filterField{
+  flex: 1;
+}
+
+.hiddenByFilter{
+  display: none;
+}
+
 .objectsEditor{
   display:grid;
   grid-template-columns: 1fr;
@@ -129,6 +162,8 @@ body{
 
 @media (max-width: 720px){
   .objGrid{ grid-template-columns: 1fr; }
+  .bulkGrid{ grid-template-columns: 1fr; }
+  .editorTopBar{ flex-direction: column; align-items: stretch; }
 }
 
 .objMeta{
