@@ -1,0 +1,358 @@
+:root{
+  --bg:#0b1220;
+  --card:#111a2e;
+  --text:#e9eefc;
+  --muted:#a9b4d0;
+  --accent:#5aa2ff;
+  --danger:#ff6b6b;
+  --ok:#35d07f;
+  --border: rgba(255,255,255,.12);
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background: radial-gradient(1000px 600px at 20% 0%, #172a58, var(--bg));
+  color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+.container{
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 18px 48px;
+}
+
+.headerTop{
+  display:flex;
+  align-items:flex-start;
+  gap: 14px;
+}
+
+.header h1{ margin:0 0 6px; font-size: 28px; }
+.sub{ margin:0; color:var(--muted); }
+
+.gearBtn{
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gearBtn:hover{
+  background: rgba(255,255,255,.16);
+}
+
+.settingsBackdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 20, .58);
+  display:flex;
+  align-items:flex-start;
+  justify-content:flex-end;
+  padding: 26px 18px;
+  z-index: 40;
+}
+
+.settingsBackdrop[hidden]{
+  display: none !important;
+}
+
+.settingsPanel{
+  width: min(420px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(17,26,46,.96), rgba(14,20,36,.96));
+  padding: 14px;
+  box-shadow: 0 20px 40px rgba(0,0,0,.35);
+}
+
+.settingsHead{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settingsHead h3{
+  margin: 0;
+}
+
+.settingsClose{
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  cursor:pointer;
+}
+
+.settingsActions{
+  margin-top: 12px;
+  display:flex;
+  justify-content:flex-end;
+  gap: 8px;
+}
+
+.card{
+  margin-top: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  backdrop-filter: blur(6px);
+}
+
+.card.inner{
+  margin-top: 14px;
+  padding: 14px;
+  background: rgba(0,0,0,.2);
+}
+
+.grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 14px;
+}
+@media (max-width: 720px){
+  .grid{ grid-template-columns: 1fr; }
+}
+
+.field label{ display:block; font-weight: 650; margin-bottom: 6px; }
+.field input[type="file"],
+.field input[type="text"],
+.field select{
+  width:100%;
+  padding: 10px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.22);
+  color: var(--text);
+  outline: none;
+}
+.field small{ display:block; color: var(--muted); margin-top: 6px; }
+
+.actions{
+  margin-top: 14px;
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.editorActions{
+  margin: 10px 0 12px;
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulkPanel{
+  margin: 10px 0;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,.02);
+}
+
+.bulkPanel h4{
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.bulkGrid{
+  grid-template-columns: repeat(4, minmax(0,1fr));
+}
+
+.editorTopBar{
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.palettePanel{
+  margin: 8px 0 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,.02);
+}
+
+.palettePanel h4{
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.paletteEditor{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+}
+
+.paletteItem{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(0,0,0,.18);
+}
+
+.paletteMeta{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filterField{
+  flex: 1;
+}
+
+.hiddenByFilter{
+  display: none;
+}
+
+.objectsEditor{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.objItem{
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255,255,255,.03);
+}
+
+.objHead{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.objHeadLeft{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+.swatch{
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.35);
+}
+
+.objBody{
+  padding: 10px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.objGrid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px;
+}
+
+@media (max-width: 720px){
+  .objGrid{ grid-template-columns: 1fr; }
+  .bulkGrid{ grid-template-columns: 1fr; }
+  .editorTopBar{ flex-direction: column; align-items: stretch; }
+  .paletteEditor{ grid-template-columns: 1fr; }
+  .settingsBackdrop{ justify-content:center; padding: 20px 12px; }
+  .gearBtn{ top: 10px; right: 10px; }
+}
+
+.objMeta{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #071027;
+  border: 0;
+  cursor:pointer;
+  text-decoration:none;
+  font-weight: 750;
+}
+.btn.secondary{
+  background: rgba(255,255,255,.10);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn:disabled{
+  opacity:.5;
+  cursor:not-allowed;
+}
+
+.status{
+  margin-top: 10px;
+  min-height: 18px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.alert{
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,107,107,.35);
+  background: rgba(255,107,107,.12);
+  color: #ffd7d7;
+}
+
+.previewWrap{
+  width: 100%;
+  overflow:auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.25);
+  padding: 10px;
+}
+#previewImg{
+  max-width: 100%;
+  height:auto;
+  display:block;
+  margin: 0 auto;
+  image-rendering: auto;
+}
+
+.details{
+  margin-top: 12px;
+}
+.details pre{
+  color: var(--muted);
+  background: rgba(0,0,0,.25);
+  border: 1px solid var(--border);
+  padding: 10px;
+  border-radius: 12px;
+  overflow:auto;
+}
+.footer{ margin-top: 18px; }
+.muted{ color: var(--muted); }
