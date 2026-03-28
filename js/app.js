@@ -2,6 +2,7 @@
 // Para GitHub Pages: configure para a URL do backend hospedado.
 // Para local: http://127.0.0.1:8000
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_STORAGE_KEY = "converter.apiBaseUrl";
 
 const FILL_OPTIONS = [
   ["tatami", "Ponto de preenchimento (tatami)"],
@@ -15,6 +16,15 @@ const FILL_OPTIONS = [
   ["stipple", "Ponto pontilhado"],
   ["network", "Ponto de preenchimento em rede"],
   ["zigzag", "Ponto de preenchimento em zigzag"],
+];
+
+const OUTLINE_OPTIONS = [
+  ["satin", "Satin (coluna / zig-zag)"],
+  ["running", "Running stitch (ponto corrido)"],
+  ["triple", "Triple stitch (ponto triplo)"],
+  ["bean", "Bean stitch"],
+  ["e_stitch", "E-stitch"],
+  ["cover", "Cover stitch"],
 ];
 
 const el = (id) => document.getElementById(id);
@@ -40,10 +50,63 @@ const bulkFillType = el("bulkFillType");
 const bulkDensity = el("bulkDensity");
 const bulkUnderlay = el("bulkUnderlay");
 const bulkShrink = el("bulkShrink");
+const bulkOutlineType = el("bulkOutlineType");
+const bulkOutlineWidth = el("bulkOutlineWidth");
+const bulkOutlinePull = el("bulkOutlinePull");
+const bulkOutlineOverlap = el("bulkOutlineOverlap");
 const apiBaseInput = el("apiBase");
+const btnApiSettings = el("btnApiSettings");
+const apiSettingsBackdrop = el("apiSettingsBackdrop");
+const btnCloseApiSettings = el("btnCloseApiSettings");
+const btnCancelApiSettings = el("btnCancelApiSettings");
+const btnSaveApiSettings = el("btnSaveApiSettings");
 const qualityAlert = el("qualityAlert");
 
-apiBaseInput.value = DEFAULT_API_BASE_URL;
+function normalizeApiBase(url) {
+  return String(url || "").trim().replace(/\/+$/, "");
+}
+
+function loadSavedApiBase() {
+  let saved = "";
+  try {
+    saved = localStorage.getItem(API_BASE_STORAGE_KEY) || "";
+  } catch (_) {
+    saved = "";
+  }
+  apiBaseInput.value = normalizeApiBase(saved) || DEFAULT_API_BASE_URL;
+}
+
+function saveApiBase() {
+  const normalized = normalizeApiBase(apiBaseInput.value);
+  if (!normalized) {
+    setStatus("Informe a URL do backend (API).", "error");
+    apiBaseInput.focus();
+    return false;
+  }
+  apiBaseInput.value = normalized;
+  try {
+    localStorage.setItem(API_BASE_STORAGE_KEY, normalized);
+  } catch (_) {
+    // Ignora falha de storage e mantém apenas na sessão atual.
+  }
+  closeApiSettings();
+  setStatus(`API configurada para ${normalized}`, "ok");
+  return true;
+}
+
+function openApiSettings() {
+  if (!apiSettingsBackdrop) return;
+  apiSettingsBackdrop.hidden = false;
+  apiBaseInput.focus();
+  apiBaseInput.select();
+}
+
+function closeApiSettings() {
+  if (!apiSettingsBackdrop) return;
+  apiSettingsBackdrop.hidden = true;
+}
+
+loadSavedApiBase();
 
 let autoPunchModel = null;
 let autoPreviewTimer = null;
@@ -70,6 +133,12 @@ initColorSelector();
 if (bulkFillType) {
   bulkFillType.innerHTML = FILL_OPTIONS.map(([value, label]) => (`
     <option value="${value}" ${value === "tatami" ? "selected" : ""}>${esc(label)}</option>
+  `)).join("");
+}
+
+if (bulkOutlineType) {
+  bulkOutlineType.innerHTML = OUTLINE_OPTIONS.map(([value, label]) => (`
+    <option value="${value}" ${value === "satin" ? "selected" : ""}>${esc(label)}</option>
   `)).join("");
 }
 
@@ -104,6 +173,12 @@ function checkQuality(file) {
 
 function fillOptionsHtml(selected) {
   return FILL_OPTIONS.map(([value, label]) => (
+    `<option value="${value}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`
+  )).join("");
+}
+
+function outlineOptionsHtml(selected) {
+  return OUTLINE_OPTIONS.map(([value, label]) => (
     `<option value="${value}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`
   )).join("");
 }
@@ -161,6 +236,22 @@ function renderObjectsEditor() {
               <option value="medium" ${obj.underlay !== "low" && obj.underlay !== "high" ? "selected" : ""}>Media</option>
               <option value="high" ${obj.underlay === "high" ? "selected" : ""}>Alta</option>
             </select>
+          </label>
+          <label class="field">
+            <span>Tipo de contorno</span>
+            <select data-prop="outline_type">${outlineOptionsHtml(obj.outline_type || "satin")}</select>
+          </label>
+          <label class="field">
+            <span>Largura contorno (mm)</span>
+            <input type="number" data-prop="outline_width_mm" min="0.5" max="4" step="0.1" value="${Number(obj.outline_width_mm ?? 1.5)}" />
+          </label>
+          <label class="field">
+            <span>Pull comp contorno (mm)</span>
+            <input type="number" data-prop="outline_pull_comp_mm" min="0" max="0.8" step="0.1" value="${Number(obj.outline_pull_comp_mm ?? 0.3)}" />
+          </label>
+          <label class="field">
+            <span>Overlap contorno (mm)</span>
+            <input type="number" data-prop="outline_overlap_mm" min="0" max="1" step="0.1" value="${Number(obj.outline_overlap_mm ?? 0.4)}" />
           </label>
         </div>
       </div>
@@ -247,6 +338,10 @@ function applyBulkToAllObjects() {
     obj.density = bulkDensity?.value || obj.density;
     obj.underlay = bulkUnderlay?.value || obj.underlay;
     obj.shrink_comp_mm = Number(bulkShrink?.value || obj.shrink_comp_mm || 0.4);
+    obj.outline_type = bulkOutlineType?.value || obj.outline_type || "satin";
+    obj.outline_width_mm = Number(bulkOutlineWidth?.value || obj.outline_width_mm || 1.5);
+    obj.outline_pull_comp_mm = Number(bulkOutlinePull?.value || obj.outline_pull_comp_mm || 0.3);
+    obj.outline_overlap_mm = Number(bulkOutlineOverlap?.value || obj.outline_overlap_mm || 0.4);
   });
   renderObjectsEditor();
 }
@@ -287,6 +382,10 @@ function getDesignConfig() {
       underlay: defaults.underlay || "medium",
       outline: true,
       outline_keepout_mm: Number(defaults.outline_keepout_mm ?? 0),
+      outline_type: defaults.outline_type || "satin",
+      outline_width_mm: Number(defaults.outline_width_mm ?? 1.5),
+      outline_pull_comp_mm: Number(defaults.outline_pull_comp_mm ?? 0.3),
+      outline_overlap_mm: Number(defaults.outline_overlap_mm ?? 0.4),
     },
     objects: autoPunchModel.analysis.objects,
   };
@@ -381,7 +480,6 @@ function scheduleAutoPreviewUpdate() {
 
 btnReset.addEventListener("click", () => {
   form.reset();
-  apiBaseInput.value = DEFAULT_API_BASE_URL;
   resultCard.hidden = true;
   previewImg.removeAttribute("src");
   downloadBtn.href = "#";
@@ -519,5 +617,40 @@ form.addEventListener("submit", async (e) => {
     await runConvert({ silent: false });
   } catch (err) {
     setStatus(`Falha na conversao:\n${err.message}`, "error");
+  }
+});
+
+btnApiSettings?.addEventListener("click", () => {
+  openApiSettings();
+});
+
+btnCloseApiSettings?.addEventListener("click", () => {
+  closeApiSettings();
+});
+
+btnCancelApiSettings?.addEventListener("click", () => {
+  closeApiSettings();
+});
+
+btnSaveApiSettings?.addEventListener("click", () => {
+  saveApiBase();
+});
+
+apiBaseInput?.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    saveApiBase();
+  }
+});
+
+apiSettingsBackdrop?.addEventListener("click", (ev) => {
+  if (ev.target === apiSettingsBackdrop) {
+    closeApiSettings();
+  }
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && apiSettingsBackdrop && !apiSettingsBackdrop.hidden) {
+    closeApiSettings();
   }
 });

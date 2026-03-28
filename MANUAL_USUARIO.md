@@ -38,8 +38,7 @@ A ferramenta foi criada para:
 
 1. Execute `rodar_local.bat` na raiz do projeto.
 2. Aguarde o backend iniciar.
-3. Abra no navegador:
-   - `http://127.0.0.1:8000/docs`
+3. Abra no navegador `http://127.0.0.1:8000`.
 
 ## 5. Fluxo de uso (3 passos)
 
@@ -136,6 +135,96 @@ Depois clique em `Aplicar em todos`.
 - `underlay`:
   - base de sustentacao antes do preenchimento principal;
   - `low`, `medium`, `high`.
+
+## 8.1 Regras de contorno (outline)
+
+O contorno tambem pode aparecer como:
+
+- borda;
+- outline stitch;
+- cover stitch (quando cobre o tatami);
+- acabamento externo.
+
+Quando o contorno envolve uma area com tatami, ele serve para:
+
+- dar definicao ao desenho;
+- esconder pequenas imperfeicoes do tatami;
+- dar mais destaque visual;
+- aumentar a resistencia da peca.
+
+### Tipos de contorno mais usados
+
+1. `satin` (coluna / zig-zag): mais usado para destaque; bom para bordas medias, logos e letras.
+
+1. `running` (ponto corrido): leve e discreto; ideal para detalhes finos.
+
+1. `triple` (ponto triplo): versao reforcada do corrido; indicado para pecas com mais desgaste/lavagem.
+
+1. `e_stitch`: muito usado para aplique; acabamento tecnico na borda do tecido aplicado.
+
+1. `bean`: visual marcado, decorativo; semelhante ao triple no reforco.
+
+1. `cover`: contorno para cobrir borda do tatami; util quando ha pequena abertura visual na borda.
+
+### Qual contorno escolher (decisao pratica)
+
+- Dar destaque: `satin`
+- Algo discreto: `running`
+- Maior resistencia: `triple`
+- Aplique: `e_stitch`
+
+### Largura/comprimento recomendados
+
+#### Satin
+
+- 0.8 mm a 1.2 mm: contorno fino
+- 1.2 mm a 2.5 mm: faixa padrao mais usada
+- ate 4.0 mm: limite seguro
+
+Observacao:
+
+- abaixo de 0.8 mm, prefira `running`.
+
+#### Running
+
+- comprimento de ponto: 2.0 mm a 3.0 mm
+- detalhe fino: 1.5 mm
+
+#### Triple
+
+- comprimento recomendado: 2.5 mm
+
+#### E-stitch
+
+- largura aparente tipica: 2.0 mm a 3.0 mm
+
+### Como evitar "buraco" entre tatami e contorno
+
+Esse problema costuma ocorrer por retracao do tecido, compensacao baixa, underlay fraco ou direcao ruim do tatami.
+
+Use estas praticas:
+
+1. Pull compensation no contorno: geralmente entre 0.2 mm e 0.4 mm; em malha pode chegar a 0.5 mm.
+
+1. Overlap do contorno sobre o tatami: use 0.3 mm a 0.5 mm; nao alinhe exatamente na borda.
+
+1. Underlay correto: tatami com edge + zigzag leve; satin com center + edge.
+
+1. Direcao do tatami: evite direcao igual a borda dominante; prefira alternar angulo (ex: 45 graus ou 135 graus).
+
+### Configuracao segura padrao
+
+Tatami:
+
+- densidade: 0.40 mm
+- underlay: edge + zigzag
+
+Contorno satin:
+
+- largura: 1.5 mm
+- pull comp: 0.3 mm
+- overlap: 0.4 mm
+- underlay: center + edge
 
 ## 9. Boas praticas para melhorar resultado
 

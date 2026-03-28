@@ -24,8 +24,86 @@ body{
   padding: 28px 18px 48px;
 }
 
+.headerTop{
+  display:flex;
+  align-items:flex-start;
+  gap: 14px;
+}
+
 .header h1{ margin:0 0 6px; font-size: 28px; }
 .sub{ margin:0; color:var(--muted); }
+
+.gearBtn{
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 60;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.gearBtn:hover{
+  background: rgba(255,255,255,.16);
+}
+
+.settingsBackdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 20, .58);
+  display:flex;
+  align-items:flex-start;
+  justify-content:flex-end;
+  padding: 26px 18px;
+  z-index: 40;
+}
+
+.settingsBackdrop[hidden]{
+  display: none !important;
+}
+
+.settingsPanel{
+  width: min(420px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(17,26,46,.96), rgba(14,20,36,.96));
+  padding: 14px;
+  box-shadow: 0 20px 40px rgba(0,0,0,.35);
+}
+
+.settingsHead{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settingsHead h3{
+  margin: 0;
+}
+
+.settingsClose{
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  cursor:pointer;
+}
+
+.settingsActions{
+  margin-top: 12px;
+  display:flex;
+  justify-content:flex-end;
+  gap: 8px;
+}
 
 .card{
   margin-top: 18px;
@@ -200,6 +278,8 @@ body{
   .bulkGrid{ grid-template-columns: 1fr; }
   .editorTopBar{ flex-direction: column; align-items: stretch; }
   .paletteEditor{ grid-template-columns: 1fr; }
+  .settingsBackdrop{ justify-content:center; padding: 20px 12px; }
+  .gearBtn{ top: 10px; right: 10px; }
 }
 
 .objMeta{

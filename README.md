@@ -1,36 +1,33 @@
 # Conversor de Imagem para Matriz de Bordado (PES/DST/JEF/EXP/HUS/VP3)
 
-Este projeto cria uma mini página (front em HTML) onde você:
-- seleciona uma imagem (alta qualidade),
-- escolhe o tamanho final (10/20/30 cm),
-- escolhe o formato (DST/PES/JEF/EXP/HUS/VP3),
-- escolhe quantidade de cores (8/12/16/24),
-- escolhe o nível de detalhe (Baixo/Médio/Alto),
-- clica em converter,
-- vê uma prévia e faz download do arquivo.
+Este projeto oferece uma interface web para:
 
-## Importante (GitHub Pages)
-O GitHub Pages **não roda Python**. Então:
-- o front fica em `docs/` (Pages),
-- a conversão roda no backend `server/` (FastAPI) hospedado em outro lugar (Render/Railway/Fly.io),
-- ou localmente (Windows) com o `rodar_local.bat`.
+- selecionar uma imagem;
+- definir tamanho final (10/20/30 cm);
+- escolher formato de saída (PES/DST/JEF/EXP/HUS/VP3);
+- ajustar quantidade de cores e nível de detalhe;
+- executar perfuração automática e editar objetos;
+- gerar preview e baixar a matriz final.
 
----
+## Arquitetura
 
-# Rodar local no Windows 11 (super fácil)
-1. Baixe o repositório como ZIP ou clone.
-2. Dê **duplo clique** em `rodar_local.bat`.
-3. O navegador vai abrir automaticamente.
+- Frontend: `index.html`, `css/`, `js/` (na raiz do projeto)
+- Backend: `server/` (FastAPI + conversão + preview + download)
 
-Se o Windows pedir permissão do Firewall, permita (rede privada).
+## Rodar local no Windows (rápido)
 
----
+1. Execute `rodar_local.bat` na raiz do projeto.
+2. Aguarde instalar dependências e iniciar o servidor.
+3. Abra `http://127.0.0.1:8000`.
 
-# Rodar local (modo manual / desenvolvedor)
-## Requisitos
+## Rodar local (modo manual)
+
+### Requisitos
+
 - Python 3.11+
 
-## Comandos
+### Comandos
+
 ```bat
 cd server
 python -m venv .venv
@@ -39,34 +36,25 @@ pip install -r requirements.txt
 uvicorn app:app --reload
 ```
 
-Abra:
-- http://127.0.0.1:8000
+Abra no navegador: `http://127.0.0.1:8000`.
 
----
+## Configuração de API no frontend
 
-# Configurar API do GitHub Pages / hospedagem
-No arquivo:
-- `docs/js/app.js`
+Arquivo: `js/app.js`
 
-Ajuste:
-- `API_BASE_URL`
+Constante: `DEFAULT_API_BASE_URL`
 
 Exemplos:
+
 - Local: `http://127.0.0.1:8000`
 - Hospedado: `https://seu-backend.exemplo.com`
 
----
+## Qualidade da conversão
 
-# Notas de Qualidade
-A conversão "imagem -> bordado" aqui usa um método automático **simplificado**:
-- quantiza as cores,
-- cria pontos por "varredura" (linhas) dentro das áreas,
-- gera trocas de cor por camada.
+A conversão automática foi otimizada para produtividade, mas ainda é um processo assistido (não substitui 100% o digitizing manual avançado em todos os cenários).
 
-Isso gera arquivos válidos e uma prévia fiel ao arquivo gerado, mas não substitui totalmente um digitizing avançado (tatami/satin/underlay sofisticado).
+Para melhores resultados:
 
----
-
-# Estrutura
-- `docs/` = Front (GitHub Pages)
-- `server/` = Backend FastAPI (conversão + preview + download)
+- use imagem com boa resolução e contraste;
+- prefira preset `medio` ou `premium_clean` como ponto de partida;
+- revise objetos críticos antes da conversão final.

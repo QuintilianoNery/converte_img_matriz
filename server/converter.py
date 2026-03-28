@@ -11,6 +11,7 @@ from PIL import Image, ImageFilter
 
 from pyembroidery import (
     EmbPattern,
+    EmbThread,
     STITCH,
     JUMP,
     COLOR_CHANGE,
@@ -62,6 +63,26 @@ FILL_TYPE_ALIASES = {
     "zigzag": "zigzag",
 }
 
+OUTLINE_TYPE_ALIASES = {
+    "satin": "satin",
+    "coluna": "satin",
+    "zig-zag": "satin",
+    "zigzag": "satin",
+    "running": "running",
+    "running stitch": "running",
+    "ponto corrido": "running",
+    "triple": "triple",
+    "triple stitch": "triple",
+    "ponto triplo": "triple",
+    "bean": "bean",
+    "bean stitch": "bean",
+    "e": "e_stitch",
+    "e-stitch": "e_stitch",
+    "e stitch": "e_stitch",
+    "cover": "cover",
+    "cover stitch": "cover",
+}
+
 DENSITY_FACTORS = {
     "low": 1.35,
     "medium": 1.0,
@@ -82,6 +103,10 @@ QUALITY_PRESETS = {
         "outline": True,
         "outline_step_mult": 1.2,
         "border_width_mm": 0.7,
+        "outline_type": "running",
+        "outline_width_mm": 1.0,
+        "outline_pull_comp_mm": 0.2,
+        "outline_overlap_mm": 0.3,
     },
     "medio": {
         "density": "medium",
@@ -90,6 +115,10 @@ QUALITY_PRESETS = {
         "outline": True,
         "outline_step_mult": 1.0,
         "border_width_mm": 0.9,
+        "outline_type": "satin",
+        "outline_width_mm": 1.5,
+        "outline_pull_comp_mm": 0.3,
+        "outline_overlap_mm": 0.4,
     },
     "premium": {
         "density": "high",
@@ -99,6 +128,10 @@ QUALITY_PRESETS = {
         "outline_step_mult": 0.75,
         "border_width_mm": 1.15,
         "outline_keepout_mm": 0.0,
+        "outline_type": "satin",
+        "outline_width_mm": 1.8,
+        "outline_pull_comp_mm": 0.35,
+        "outline_overlap_mm": 0.45,
     },
     "premium_clean": {
         "density": "high",
@@ -108,6 +141,10 @@ QUALITY_PRESETS = {
         "outline_step_mult": 1.35,
         "border_width_mm": 0.75,
         "outline_keepout_mm": 0.45,
+        "outline_type": "satin",
+        "outline_width_mm": 1.4,
+        "outline_pull_comp_mm": 0.3,
+        "outline_overlap_mm": 0.35,
     },
 }
 
@@ -140,6 +177,13 @@ def _normalize_quality_preset(value: str | None) -> str:
     if v == "médio":
         return "medio"
     return "medio"
+
+
+def _normalize_outline_type(value: str | None) -> str:
+    if not value:
+        return "satin"
+    key = str(value).strip().lower()
+    return OUTLINE_TYPE_ALIASES.get(key, "satin")
 
 
 def _parse_hex_color(value: str | None):
@@ -361,6 +405,10 @@ def analyze_image_for_autopunch(
                     "shrink_comp_mm": float(preset["shrink_comp_mm"]),
                     "underlay": preset["underlay"],
                     "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
+                    "outline_type": preset.get("outline_type", "satin"),
+                    "outline_width_mm": float(preset.get("outline_width_mm", 1.5)),
+                    "outline_pull_comp_mm": float(preset.get("outline_pull_comp_mm", 0.3)),
+                    "outline_overlap_mm": float(preset.get("outline_overlap_mm", 0.4)),
                 }
             )
 
@@ -372,6 +420,10 @@ def analyze_image_for_autopunch(
             "shrink_comp_mm": float(preset["shrink_comp_mm"]),
             "underlay": preset["underlay"],
             "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
+            "outline_type": preset.get("outline_type", "satin"),
+            "outline_width_mm": float(preset.get("outline_width_mm", 1.5)),
+            "outline_pull_comp_mm": float(preset.get("outline_pull_comp_mm", 0.3)),
+            "outline_overlap_mm": float(preset.get("outline_overlap_mm", 0.4)),
             "quality_preset": quality_preset,
             "detail": detail,
         },
@@ -559,15 +611,15 @@ def _trace_boundary_polylines(boundary_mask: np.ndarray, min_len_px: int = 8):
     return polylines
 
 
-def _vector_outline_segments(boundary_mask: np.ndarray, mm_per_px: float, step_mm: float):
-    """Create segments from traced vector-like contour paths."""
+def _vector_outline_polylines(boundary_mask: np.ndarray, mm_per_px: float, step_mm: float):
+    """Return smoothed vector-like contour polylines in mm coordinates."""
     if not boundary_mask.any():
         return []
 
     step_px = max(1, int(round(step_mm / max(mm_per_px, 1e-6))))
     max_edge_px = max(3.0, step_px * 2.8)
     polylines = _trace_boundary_polylines(boundary_mask, min_len_px=max(8, step_px * 2))
-    segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    polylines_mm: list[list[tuple[float, float]]] = []
 
     for path in polylines:
         epsilon_px = max(0.6, step_px * 0.35)
@@ -578,20 +630,123 @@ def _vector_outline_segments(boundary_mask: np.ndarray, mm_per_px: float, step_m
         if len(sampled) < 2:
             continue
 
+        clean: list[tuple[float, float]] = []
         for i in range(len(sampled) - 1):
             y0, x0 = sampled[i]
             y1, x1 = sampled[i + 1]
             if math.hypot(x1 - x0, y1 - y0) > max_edge_px:
                 continue
-            segments_mm.append(((x0 * mm_per_px, y0 * mm_per_px), (x1 * mm_per_px, y1 * mm_per_px)))
+            if not clean:
+                clean.append((x0 * mm_per_px, y0 * mm_per_px))
+            clean.append((x1 * mm_per_px, y1 * mm_per_px))
 
-        # Close loops when ends are near each other.
-        y0, x0 = sampled[0]
-        y1, x1 = sampled[-1]
-        if math.hypot(x1 - x0, y1 - y0) <= max(2.0, step_px * 1.5):
-            segments_mm.append(((x1 * mm_per_px, y1 * mm_per_px), (x0 * mm_per_px, y0 * mm_per_px)))
+        if len(clean) >= 2:
+            polylines_mm.append(clean)
 
-    return segments_mm
+    return polylines_mm
+
+
+def _outline_segments_from_polyline(
+    polyline_mm: list[tuple[float, float]],
+    outline_type: str,
+    width_mm: float,
+    step_mm: float,
+    pull_comp_mm: float,
+):
+    segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    if len(polyline_mm) < 2:
+        return segments
+
+    outline_type = _normalize_outline_type(outline_type)
+    width_eff = max(0.2, width_mm + pull_comp_mm)
+
+    def add_running(points: list[tuple[float, float]], repeats: int = 1):
+        if len(points) < 2:
+            return
+        for _ in range(max(1, repeats)):
+            for i in range(len(points) - 1):
+                segments.append((points[i], points[i + 1]))
+
+    if outline_type == "running":
+        add_running(polyline_mm, repeats=1)
+        return segments
+
+    if outline_type == "triple":
+        add_running(polyline_mm, repeats=3)
+        return segments
+
+    if outline_type == "bean":
+        add_running(polyline_mm, repeats=2)
+        return segments
+
+    sample_step = max(0.35, step_mm)
+    half_w = max(0.1, width_eff * 0.5)
+
+    for i in range(len(polyline_mm) - 1):
+        x0, y0 = polyline_mm[i]
+        x1, y1 = polyline_mm[i + 1]
+        dx = x1 - x0
+        dy = y1 - y0
+        L = math.hypot(dx, dy)
+        if L < 1e-6:
+            continue
+
+        ux = dx / L
+        uy = dy / L
+        nx = -uy
+        ny = ux
+        n_samples = max(1, int(math.ceil(L / sample_step)))
+
+        if outline_type in {"satin", "cover"}:
+            for s in range(n_samples + 1):
+                t = s / n_samples
+                px = x0 + dx * t
+                py = y0 + dy * t
+                a = (px + nx * half_w, py + ny * half_w)
+                b = (px - nx * half_w, py - ny * half_w)
+                segments.append((a, b))
+            continue
+
+        if outline_type == "e_stitch":
+            for s in range(n_samples + 1):
+                t = s / n_samples
+                px = x0 + dx * t
+                py = y0 + dy * t
+                c = (px, py)
+                a = (px + nx * half_w, py + ny * half_w)
+                b = (px - nx * half_w, py - ny * half_w)
+                segments.append((c, a))
+                segments.append((a, c))
+                segments.append((c, b))
+            continue
+
+        # fallback seguro
+        segments.append(((x0, y0), (x1, y1)))
+
+    return segments
+
+
+def _vector_outline_segments(
+    boundary_mask: np.ndarray,
+    mm_per_px: float,
+    step_mm: float,
+    outline_type: str,
+    width_mm: float,
+    pull_comp_mm: float,
+):
+    polylines = _vector_outline_polylines(boundary_mask, mm_per_px=mm_per_px, step_mm=step_mm)
+    out: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for poly in polylines:
+        out.extend(
+            _outline_segments_from_polyline(
+                poly,
+                outline_type=outline_type,
+                width_mm=width_mm,
+                step_mm=step_mm,
+                pull_comp_mm=pull_comp_mm,
+            )
+        )
+    return out
 
 
 def _apply_shrink_comp(mask: np.ndarray, mm_per_px: float, shrink_comp_mm: float):
@@ -822,6 +977,10 @@ def convert_image_to_embroidery(
     global_outline_mult = float(cfg_global.get("outline_step_mult", preset["outline_step_mult"]))
     global_border_width_mm = float(cfg_global.get("border_width_mm", preset["border_width_mm"]))
     global_outline_keepout_mm = float(cfg_global.get("outline_keepout_mm", preset.get("outline_keepout_mm", 0.0)))
+    global_outline_type = _normalize_outline_type(cfg_global.get("outline_type", preset.get("outline_type", "satin")))
+    global_outline_width_mm = float(cfg_global.get("outline_width_mm", preset.get("outline_width_mm", 1.5)))
+    global_outline_pull_comp_mm = float(cfg_global.get("outline_pull_comp_mm", preset.get("outline_pull_comp_mm", 0.3)))
+    global_outline_overlap_mm = float(cfg_global.get("outline_overlap_mm", preset.get("outline_overlap_mm", 0.4)))
 
     objects = []
     for obj in default_objects:
@@ -836,6 +995,10 @@ def convert_image_to_embroidery(
             o["color"] = str(user_o.get("color", o["color"]))
             o["outline"] = _as_bool(user_o.get("outline", global_outline), global_outline)
             o["border_width_mm"] = float(user_o.get("border_width_mm", global_border_width_mm))
+            o["outline_type"] = _normalize_outline_type(user_o.get("outline_type", global_outline_type))
+            o["outline_width_mm"] = float(user_o.get("outline_width_mm", global_outline_width_mm))
+            o["outline_pull_comp_mm"] = float(user_o.get("outline_pull_comp_mm", global_outline_pull_comp_mm))
+            o["outline_overlap_mm"] = float(user_o.get("outline_overlap_mm", global_outline_overlap_mm))
         objects.append(o)
 
     pattern = EmbPattern()
@@ -848,7 +1011,10 @@ def convert_image_to_embroidery(
             ci = int(o["label_index"])
             rgb = tuple(map(int, centers_u8[ci]))
         r, g, b = rgb
-        pattern.add_thread({"color": (r << 16) | (g << 8) | b, "description": str(o["id"])})
+        thread = EmbThread()
+        thread.set_color(int(r), int(g), int(b))
+        thread.description = str(o["id"])
+        pattern.add_thread(thread)
 
     # gerar stitches por cor
     first_color = True
@@ -932,10 +1098,18 @@ def convert_image_to_embroidery(
                 if reduced.any():
                     outline_src = reduced
 
+            outline_overlap_mm = float(obj.get("outline_overlap_mm", global_outline_overlap_mm))
+            if outline_overlap_mm > 0:
+                overlap_px = max(1, int(round(outline_overlap_mm / max(mm_per_px, 1e-6))))
+                outline_src = _dilate_n(outline_src, overlap_px)
+
             outline_segments = _vector_outline_segments(
                 outline_src,
                 mm_per_px=mm_per_px,
                 step_mm=max(step_obj_mm * global_outline_mult, 0.18),
+                outline_type=_normalize_outline_type(obj.get("outline_type", global_outline_type)),
+                width_mm=float(obj.get("outline_width_mm", global_outline_width_mm)),
+                pull_comp_mm=float(obj.get("outline_pull_comp_mm", global_outline_pull_comp_mm)),
             )
             segments = segments + outline_segments
         if not segments:
@@ -975,7 +1149,11 @@ def convert_image_to_embroidery(
     # salvar arquivo
     out_ext = out_format.lower()
     out_path = out_dir / f"output.{out_ext}"
-    pattern.write(str(out_path))
+    if out_format == "PES":
+        # PES v6 mantém melhor as informações da threadlist (RGB) em softwares como Embird.
+        pattern.write(str(out_path), version=6)
+    else:
+        pattern.write(str(out_path))
 
     # gerar preview PNG
     preview_path = out_dir / "preview.png"

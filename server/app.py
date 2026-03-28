@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -31,15 +32,26 @@ app.add_middleware(
 )
 
 # Servir o front localmente (opcional, mas facilita para leigos)
-DOCS_DIR = BASE_DIR.parent / "docs"
-if DOCS_DIR.exists():
-    app.mount("/docs", StaticFiles(directory=str(DOCS_DIR), html=True), name="docs")
+FRONT_DIR = BASE_DIR.parent
+FRONT_INDEX = FRONT_DIR / "index.html"
+FRONT_CSS = FRONT_DIR / "css"
+FRONT_JS = FRONT_DIR / "js"
+
+if FRONT_CSS.exists():
+    app.mount("/css", StaticFiles(directory=str(FRONT_CSS)), name="css")
+if FRONT_JS.exists():
+    app.mount("/js", StaticFiles(directory=str(FRONT_JS)), name="js")
+
+@app.get("/docs", include_in_schema=False)
+def docs_redirect():
+    # Compatibilidade com URLs antigas.
+    return RedirectResponse(url="/", status_code=307)
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     # Evita log de 404 quando o navegador solicita o favicon automaticamente.
     candidates = [
-        DOCS_DIR / "favicon.ico",
+        FRONT_DIR / "favicon.ico",
         BASE_DIR.parent / "favicon.ico",
     ]
     for icon_path in candidates:
@@ -50,10 +62,10 @@ def favicon():
 @app.get("/", response_class=HTMLResponse)
 def root():
     # Em local, já abre a UI
-    if DOCS_DIR.exists():
-        index_path = DOCS_DIR / "index.html"
+    if FRONT_INDEX.exists():
+        index_path = FRONT_INDEX
         return index_path.read_text(encoding="utf-8")
-    return "<h1>Backend OK</h1><p>A UI está em /docs</p>"
+    return "<h1>Backend OK</h1><p>A UI está em /</p>"
 
 @app.post("/convert")
 async def convert(
