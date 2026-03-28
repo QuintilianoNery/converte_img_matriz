@@ -374,6 +374,71 @@ def _find_components(mask: np.ndarray, min_area_px: int = 36):
     return objects, object_map
 
 
+def _recommend_autopunch_settings(
+    *,
+    width_px: int,
+    height_px: int,
+    opaque_mask: np.ndarray,
+    color_counts: np.ndarray,
+    requested_colors: int,
+    requested_detail: str,
+) -> dict:
+    total_px = max(1, width_px * height_px)
+    opaque_px = int(np.count_nonzero(opaque_mask))
+    coverage = opaque_px / float(total_px)
+
+    used_counts = color_counts[color_counts > 0]
+    used_colors = int(used_counts.size)
+    dominant_ratio = float(used_counts.max() / max(1, opaque_px)) if used_counts.size else 1.0
+    micro_colors = int(np.count_nonzero(used_counts < max(40, int(opaque_px * 0.01))))
+
+    boundary_ratio = 0.0
+    if opaque_px > 0:
+        boundary_ratio = float(np.count_nonzero(_boundary_mask(opaque_mask)) / opaque_px)
+
+    detail_score = boundary_ratio * 1.4 + (1.0 - dominant_ratio) * 0.8 + min(1.0, micro_colors / 8.0) * 0.45
+
+    if detail_score >= 1.1:
+        rec_detail = "high"
+        rec_preset = "premium_clean"
+    elif detail_score >= 0.72:
+        rec_detail = "medium"
+        rec_preset = "premium"
+    else:
+        rec_detail = "medium" if requested_detail == "high" else "low"
+        rec_preset = "medio" if coverage > 0.22 else "leve"
+
+    rec_colors = int(max(4, min(24, round(used_colors + max(0, micro_colors // 2)))))
+    rec_colors = int(max(4, min(24, round((rec_colors * 0.6) + (requested_colors * 0.4)))))
+
+    preset = QUALITY_PRESETS[rec_preset]
+    global_cfg = {
+        "fill_type": "tatami",
+        "density": preset["density"],
+        "shrink_comp_mm": float(preset["shrink_comp_mm"]),
+        "underlay": preset["underlay"],
+        "outline_type": preset.get("outline_type", "satin"),
+        "outline_width_mm": float(preset.get("outline_width_mm", 1.5)),
+        "outline_pull_comp_mm": float(preset.get("outline_pull_comp_mm", 0.3)),
+        "outline_overlap_mm": float(preset.get("outline_overlap_mm", 0.4)),
+        "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
+    }
+
+    return {
+        "quality_preset": rec_preset,
+        "detail": rec_detail,
+        "colors": rec_colors,
+        "global": global_cfg,
+        "metrics": {
+            "coverage": round(coverage, 4),
+            "boundary_ratio": round(boundary_ratio, 4),
+            "used_colors": used_colors,
+            "dominant_ratio": round(dominant_ratio, 4),
+            "detail_score": round(detail_score, 4),
+        },
+    }
+
+
 def analyze_image_for_autopunch(
     input_image_path: Path,
     num_colors: int,
@@ -381,8 +446,10 @@ def analyze_image_for_autopunch(
     quality_preset: str = "medio",
 ):
     """Retorna objetos agrupados com configuração inicial editável."""
-    quality_preset = _normalize_quality_preset(quality_preset)
-    preset = QUALITY_PRESETS[quality_preset]
+    requested_preset = _normalize_quality_preset(quality_preset)
+    requested_detail = str(detail or "medium").strip().lower()
+    if requested_detail not in DETAIL_STEP_MM:
+        requested_detail = "medium"
 
     img = Image.open(input_image_path).convert("RGBA")
     max_side = 900
@@ -394,6 +461,27 @@ def analyze_image_for_autopunch(
     labels_used = label_img[opaque_mask]
     counts = np.bincount(labels_used, minlength=int(centers_u8.shape[0]))
     order = np.argsort(-counts)
+
+    recommended = _recommend_autopunch_settings(
+        width_px=img.size[0],
+        height_px=img.size[1],
+        opaque_mask=opaque_mask,
+        color_counts=counts,
+        requested_colors=int(num_colors),
+        requested_detail=requested_detail,
+    )
+    if requested_preset in {"premium", "premium_clean"}:
+        recommended["quality_preset"] = requested_preset
+        recommended["global"] = {
+            **recommended.get("global", {}),
+            **QUALITY_PRESETS[requested_preset],
+            "fill_type": "tatami",
+        }
+
+    preset_name = _normalize_quality_preset(recommended.get("quality_preset", requested_preset))
+    preset = QUALITY_PRESETS[preset_name]
+    global_cfg = recommended.get("global", {}) if isinstance(recommended, dict) else {}
+    rec_detail = str(recommended.get("detail", requested_detail))
 
     out_objects = []
     for ci in order.tolist():
@@ -412,33 +500,34 @@ def analyze_image_for_autopunch(
                     "area_px": comp["area_px"],
                     "enabled": True,
                     "color": f"#{r:02x}{g:02x}{b:02x}",
-                    "fill_type": "tatami",
-                    "density": preset["density"],
-                    "shrink_comp_mm": float(preset["shrink_comp_mm"]),
-                    "underlay": preset["underlay"],
-                    "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
-                    "outline_type": preset.get("outline_type", "satin"),
-                    "outline_width_mm": float(preset.get("outline_width_mm", 1.5)),
-                    "outline_pull_comp_mm": float(preset.get("outline_pull_comp_mm", 0.3)),
-                    "outline_overlap_mm": float(preset.get("outline_overlap_mm", 0.4)),
+                    "fill_type": str(global_cfg.get("fill_type", "tatami")),
+                    "density": str(global_cfg.get("density", preset["density"])),
+                    "shrink_comp_mm": float(global_cfg.get("shrink_comp_mm", preset["shrink_comp_mm"])),
+                    "underlay": str(global_cfg.get("underlay", preset["underlay"])),
+                    "outline_keepout_mm": float(global_cfg.get("outline_keepout_mm", preset.get("outline_keepout_mm", 0.0))),
+                    "outline_type": str(global_cfg.get("outline_type", preset.get("outline_type", "satin"))),
+                    "outline_width_mm": float(global_cfg.get("outline_width_mm", preset.get("outline_width_mm", 1.5))),
+                    "outline_pull_comp_mm": float(global_cfg.get("outline_pull_comp_mm", preset.get("outline_pull_comp_mm", 0.3))),
+                    "outline_overlap_mm": float(global_cfg.get("outline_overlap_mm", preset.get("outline_overlap_mm", 0.4))),
                 }
             )
 
     return {
         "objects": out_objects,
         "defaults": {
-            "fill_type": "tatami",
-            "density": preset["density"],
-            "shrink_comp_mm": float(preset["shrink_comp_mm"]),
-            "underlay": preset["underlay"],
-            "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
-            "outline_type": preset.get("outline_type", "satin"),
-            "outline_width_mm": float(preset.get("outline_width_mm", 1.5)),
-            "outline_pull_comp_mm": float(preset.get("outline_pull_comp_mm", 0.3)),
-            "outline_overlap_mm": float(preset.get("outline_overlap_mm", 0.4)),
-            "quality_preset": quality_preset,
-            "detail": detail,
+            "fill_type": str(global_cfg.get("fill_type", "tatami")),
+            "density": str(global_cfg.get("density", preset["density"])),
+            "shrink_comp_mm": float(global_cfg.get("shrink_comp_mm", preset["shrink_comp_mm"])),
+            "underlay": str(global_cfg.get("underlay", preset["underlay"])),
+            "outline_keepout_mm": float(global_cfg.get("outline_keepout_mm", preset.get("outline_keepout_mm", 0.0))),
+            "outline_type": str(global_cfg.get("outline_type", preset.get("outline_type", "satin"))),
+            "outline_width_mm": float(global_cfg.get("outline_width_mm", preset.get("outline_width_mm", 1.5))),
+            "outline_pull_comp_mm": float(global_cfg.get("outline_pull_comp_mm", preset.get("outline_pull_comp_mm", 0.3))),
+            "outline_overlap_mm": float(global_cfg.get("outline_overlap_mm", preset.get("outline_overlap_mm", 0.4))),
+            "quality_preset": preset_name,
+            "detail": rec_detail,
         },
+        "recommended": recommended,
         "image_size": {"width": img.size[0], "height": img.size[1]},
     }
 

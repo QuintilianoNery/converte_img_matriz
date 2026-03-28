@@ -76,7 +76,7 @@ def render_preview(
 
     all_points = [p for layer in points_by_color for path in layer for p in path]
     if len(all_points) < 2:
-        img = Image.new("RGB", (800, 600), (11, 18, 32))
+        img = Image.new("RGB", (800, 600), (246, 246, 242))
         img.save(out_path)
         return
 
@@ -107,7 +107,7 @@ def render_preview(
     w = max(480, min(w, max_size_px))
     h = max(360, min(h, max_size_px))
 
-    img = Image.new("RGB", (w, h), (11, 18, 32))
+    img = Image.new("RGB", (w, h), (246, 246, 242))
     draw = ImageDraw.Draw(img)
 
     # Tentar pegar cores do threadlist
@@ -122,10 +122,18 @@ def render_preview(
 
     for i, layer in enumerate(points_by_color):
         color = thread_colors[i] if i < len(thread_colors) else (90, 160, 255)
+        shadow = tuple(max(0, c - 38) for c in color)
+        highlight = tuple(min(255, int(c + (255 - c) * 0.28)) for c in color)
         for path in layer:
             if len(path) < 2:
                 continue
             mapped = [map_pt(px, py) for (px, py) in path]
+            draw.line(mapped, fill=shadow, width=3)
             draw.line(mapped, fill=color, width=2)
+
+            # Pequenos highlights para simular fio real de bordado.
+            for pi in range(0, len(mapped), 4):
+                x, y = mapped[pi]
+                draw.ellipse((x - 1, y - 1, x + 1, y + 1), fill=highlight)
 
     img.save(out_path)

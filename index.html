@@ -118,6 +118,36 @@
 
   /* Force hidden attribute to win over Tailwind display classes (e.g. flex/block). */
   [hidden] { display: none !important; }
+
+  #editorInspector {
+    width: 360px;
+    min-width: 280px;
+    max-width: 760px;
+    transition: width .2s ease;
+  }
+  #editorInspector.inspector-collapsed {
+    width: 44px !important;
+    min-width: 44px !important;
+  }
+  #editorInspector.inspector-collapsed #inspectorContentArea,
+  #editorInspector.inspector-collapsed #inspectorHeaderText {
+    display: none;
+  }
+  #editorInspector.inspector-collapsed #btnInspectorCollapse .material-symbols-outlined {
+    transform: rotate(180deg);
+  }
+  #inspectorResizeHandle {
+    position: absolute;
+    left: -3px;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+  }
+  #inspectorResizeHandle:hover {
+    background: rgba(76,214,255,.2);
+  }
 </style>
 </head>
 <body class="bg-surface text-on-surface font-body selection:bg-primary/30 overflow-hidden h-screen flex flex-col">
@@ -284,7 +314,7 @@
         <div class="grid grid-cols-12 gap-6 mb-8">
 
           <!-- Upload Area -->
-          <section class="col-span-12 lg:col-span-8">
+          <section id="uploadMainSection" class="col-span-12 lg:col-span-8">
             <div id="uploadZone" class="upload-zone relative group cursor-pointer h-[220px] rounded-xl border-2 border-dashed border-outline-variant/30 bg-surface-container-low flex flex-col items-center justify-center transition-all hover:border-primary/50 hover:bg-surface-container overflow-hidden"
               onclick="document.getElementById('image').click()">
               <div class="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -388,12 +418,17 @@
           </section>
 
           <!-- Pro Tips Panel -->
-          <section class="col-span-12 lg:col-span-4">
+          <section id="proTipsSection" class="col-span-12 lg:col-span-4">
             <div class="bg-surface-container h-full rounded-xl p-5 border border-outline-variant/10 flex flex-col">
-              <h3 class="font-headline font-bold text-base mb-4 flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary text-[18px]">lightbulb</span>
-                Dicas Profissionais
-              </h3>
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-headline font-bold text-base flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[18px]">lightbulb</span>
+                  Dicas Profissionais
+                </h3>
+                <button id="btnHideProTips" type="button" class="text-[10px] uppercase tracking-widest text-outline hover:text-on-surface transition-colors">
+                  Fechar
+                </button>
+              </div>
               <div class="space-y-3 flex-1">
                 <div class="flex gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant/5">
                   <span class="material-symbols-outlined text-tertiary text-[18px] flex-shrink-0">check_circle</span>
@@ -468,8 +503,15 @@
               </svg>
             </div>
           </div>
-          <!-- Zoom label -->
-          <div class="absolute bottom-3 right-3 bg-surface-container-highest/80 backdrop-blur px-2 py-0.5 rounded text-[9px] text-on-surface-variant font-mono">125% VISOR</div>
+          <!-- Zoom controls -->
+          <div class="absolute bottom-3 left-3 bg-surface-container-highest/90 backdrop-blur px-2 py-1 rounded border border-outline-variant/20 flex items-center gap-2">
+            <span class="text-[9px] uppercase tracking-widest text-outline">Zoom</span>
+            <input id="previewZoomRange" type="range" min="50" max="300" step="5" value="100" class="w-28 custom-range"/>
+            <span id="previewZoomPct" class="text-[9px] font-mono text-on-surface-variant w-10 text-right">100%</span>
+          </div>
+          <div class="absolute bottom-3 right-3 bg-surface-container-highest/80 backdrop-blur px-2 py-0.5 rounded text-[9px] text-on-surface-variant font-mono">
+            <span id="previewZoomBadge">100% VISOR</span>
+          </div>
           <!-- Back button -->
           <button type="button" onclick="switchToDashView(event)"
             class="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 bg-surface-container/80 backdrop-blur hover:bg-surface-container-high border border-outline-variant/20 rounded-lg text-xs font-bold text-on-surface-variant transition-all">
@@ -480,104 +522,20 @@
 
         <!-- Editor Controls Area -->
         <div class="flex-1 overflow-y-auto p-6 bg-surface">
-
-          <!-- Bulk Adjustment Panel -->
-          <div class="mb-6 p-5 bg-surface-container rounded-xl border border-outline-variant/10">
-            <h4 class="font-headline font-bold text-sm text-on-surface mb-4 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary text-[16px]">tune</span>
-              Ajuste Rápido Global
-            </h4>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div class="objField">
-                <label>Preenchimento</label>
-                <select id="bulkFillType" class="inspector-select"></select>
-              </div>
-              <div class="objField">
-                <label>Densidade</label>
-                <select id="bulkDensity" class="inspector-select">
-                  <option value="low">Baixa</option>
-                  <option value="medium" selected>Média</option>
-                  <option value="high">Alta</option>
-                </select>
-              </div>
-              <div class="objField">
-                <label>Sob-costura</label>
-                <select id="bulkUnderlay" class="inspector-select">
-                  <option value="none">Desligada</option>
-                  <option value="low">Baixa</option>
-                  <option value="medium" selected>Média</option>
-                  <option value="high">Alta</option>
-                </select>
-              </div>
-              <div class="objField">
-                <label>Compensação (mm)</label>
-                <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" class="inspector-input"/>
-              </div>
-              <div class="objField">
-                <label>Tipo de Contorno</label>
-                <select id="bulkOutlineType" class="inspector-select"></select>
-              </div>
-              <div class="objField">
-                <label>Largura Contorno (mm)</label>
-                <input id="bulkOutlineWidth" type="number" min="0.5" max="4" step="0.1" value="1.5" class="inspector-input"/>
-              </div>
-              <div class="objField">
-                <label>Pull Comp (mm)</label>
-                <input id="bulkOutlinePull" type="number" min="0" max="0.8" step="0.1" value="0.3" class="inspector-input"/>
-              </div>
-              <div class="objField">
-                <label>Overlap (mm)</label>
-                <input id="bulkOutlineOverlap" type="number" min="0" max="1" step="0.1" value="0.4" class="inspector-input"/>
-              </div>
+          <div class="mb-4 p-3 bg-surface-container rounded-xl border border-outline-variant/10">
+            <div class="flex items-center justify-between mb-2">
+              <span id="stageTitleInline" class="text-[10px] font-bold text-outline uppercase">Aguardando</span>
+              <span id="stagePercentInline" class="text-[10px] text-primary">0%</span>
             </div>
-            <div class="mt-4 flex gap-3">
-              <button type="button" id="btnApplyBulk"
-                class="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-bold transition-all border border-primary/20">
-                Aplicar em Todos
-              </button>
-              <button type="submit" id="btnConvert"
-                class="flex items-center gap-2 px-5 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-xs rounded-lg hover:opacity-90 transition-all">
-                <span class="material-symbols-outlined text-[14px]">sync</span>
-                Converter
-              </button>
+            <div class="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
+              <div id="stageBarFillInline" class="h-full bg-gradient-to-r from-primary to-primary-container w-0 transition-all duration-300"></div>
             </div>
+            <p id="stageSubtextInline" class="text-[9px] text-outline mt-2">Sem processamento em execução.</p>
           </div>
 
-          <!-- Palette Editor -->
-          <div class="mb-6 p-5 bg-surface-container rounded-xl border border-outline-variant/10">
-            <h4 class="font-headline font-bold text-sm text-on-surface mb-3 flex items-center gap-2">
-              <span class="material-symbols-outlined text-primary text-[16px]">palette</span>
-              Paleta de Cores Quantizadas
-            </h4>
-            <p class="text-[10px] text-outline mb-4">1 seletor por cor detectada. Se escolher 1 cor no Passo 1, aparece apenas 1 seletor.</p>
-            <div id="paletteEditor" class="flex flex-wrap gap-3"></div>
-          </div>
-
-          <!-- Objects Editor -->
-          <div class="mb-6">
-            <div class="flex items-center justify-between mb-4">
-              <h4 class="font-headline font-bold text-sm text-on-surface flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary text-[16px]">account_tree</span>
-                Objetos de Design
-              </h4>
-              <div id="objectsCount" class="text-[10px] text-outline"></div>
-            </div>
-            <div class="mb-3 flex items-center gap-3">
-              <div class="relative flex-1 max-w-xs">
-                <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[14px]">search</span>
-                <input id="objectFilter" type="text" placeholder="Buscar objeto (ex: c3_o2)"
-                  class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg pl-8 pr-3 py-2 text-xs text-on-surface focus:ring-1 focus:ring-primary outline-none"/>
-              </div>
-              <button type="button" id="btnExpandAll"
-                class="px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all border border-outline-variant/20">
-                Expandir Tudo
-              </button>
-              <button type="button" id="btnCollapseAll"
-                class="px-3 py-2 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all border border-outline-variant/20">
-                Recolher Tudo
-              </button>
-            </div>
-            <div id="objectsEditor"></div>
+          <div class="mb-6 p-4 bg-surface-container rounded-xl border border-outline-variant/10 text-[11px] text-on-surface-variant">
+            As propriedades avançadas foram movidas para o menu lateral direito.
+            Ajuste os parâmetros e acompanhe a pré-visualização automática.
           </div>
 
           <!-- Editor Action Buttons -->
@@ -617,25 +575,125 @@
   </main>
 
   <!-- EDITOR INSPECTOR (right panel) -->
-  <aside id="editorInspector" class="hidden flex-shrink-0 w-72 bg-[#1e2023] border-l border-[#414754]/15 flex-col">
-    <div class="p-4 border-b border-outline-variant/15">
-      <h2 class="font-headline font-bold text-sm tracking-tight text-on-surface">Inspetor</h2>
-      <p class="text-[9px] text-outline uppercase tracking-widest">Propriedades</p>
+  <aside id="editorInspector" class="hidden flex-shrink-0 bg-[#1e2023] border-l border-[#414754]/15 flex-col relative">
+    <div id="inspectorResizeHandle" title="Arraste para redimensionar"></div>
+    <div class="p-3 border-b border-outline-variant/15 flex items-center justify-between gap-2">
+      <div id="inspectorHeaderText">
+        <h2 class="font-headline font-bold text-sm tracking-tight text-on-surface">Inspetor</h2>
+        <p class="text-[9px] text-outline uppercase tracking-widest">Propriedades</p>
+      </div>
+      <button id="btnInspectorCollapse" type="button" class="p-1.5 rounded hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Minimizar/Expandir propriedades">
+        <span class="material-symbols-outlined text-sm">chevron_right</span>
+      </button>
     </div>
+    <div id="inspectorContentArea" class="flex-1 flex flex-col min-h-0">
     <!-- Inspector Tabs -->
     <nav class="flex border-b border-outline-variant/10">
+      <button onclick="switchInspTab('props', this)" id="inspTabProps"
+        class="py-3 text-[10px] font-bold text-primary border-b border-primary flex-1 transition-colors">Propriedades</button>
       <button onclick="switchInspTab('stitch', this)" id="inspTabStitch"
-        class="py-3 text-[10px] font-bold text-primary border-b border-primary flex-1 transition-colors">Ajustes de Ponto</button>
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Ponto</button>
       <button onclick="switchInspTab('fill', this)" id="inspTabFill"
-        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Preenchimento</button>
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Preench.</button>
       <button onclick="switchInspTab('layers', this)" id="inspTabLayers"
         class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Camadas</button>
     </nav>
 
     <div class="flex-1 overflow-y-auto p-4 space-y-5">
 
+      <!-- Tab: Properties -->
+      <div id="inspPanelProps" class="space-y-4">
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <h4 class="font-headline font-bold text-xs text-on-surface mb-3 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[14px]">tune</span>
+            Ajustes Globais
+          </h4>
+          <div class="grid grid-cols-1 gap-2">
+            <div class="objField">
+              <label>Preenchimento</label>
+              <select id="bulkFillType" class="inspector-select"></select>
+            </div>
+            <div class="objField">
+              <label>Densidade</label>
+              <select id="bulkDensity" class="inspector-select">
+                <option value="low">Baixa</option>
+                <option value="medium" selected>Média</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <div class="objField">
+              <label>Sob-costura</label>
+              <select id="bulkUnderlay" class="inspector-select">
+                <option value="none">Desligada</option>
+                <option value="low">Baixa</option>
+                <option value="medium" selected>Média</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <div class="objField">
+              <label>Compensação (mm)</label>
+              <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label>Tipo de Contorno</label>
+              <select id="bulkOutlineType" class="inspector-select"></select>
+            </div>
+            <div class="objField">
+              <label>Largura Contorno (mm)</label>
+              <input id="bulkOutlineWidth" type="number" min="0.5" max="4" step="0.1" value="1.5" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label>Pull Comp (mm)</label>
+              <input id="bulkOutlinePull" type="number" min="0" max="0.8" step="0.1" value="0.3" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label>Overlap (mm)</label>
+              <input id="bulkOutlineOverlap" type="number" min="0" max="1" step="0.1" value="0.4" class="inspector-input"/>
+            </div>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <button type="button" id="btnApplyBulk" class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded text-[10px] font-bold transition-all border border-primary/20">
+              Aplicar em Todos
+            </button>
+            <button type="submit" id="btnConvert" class="flex items-center gap-1 px-3 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-[10px] rounded hover:opacity-90 transition-all">
+              <span class="material-symbols-outlined text-[12px]">sync</span>
+              Converter
+            </button>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <h4 class="font-headline font-bold text-xs text-on-surface mb-2 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[14px]">palette</span>
+            Paleta de Cores Quantizadas
+          </h4>
+          <p class="text-[10px] text-outline mb-3">Ajuste as cores por grupo detectado.</p>
+          <div id="paletteEditor" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-headline font-bold text-xs text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary text-[14px]">account_tree</span>
+              Objetos de Design
+            </h4>
+            <div id="objectsCount" class="text-[10px] text-outline"></div>
+          </div>
+          <div class="mb-2 flex items-center gap-2">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[12px]">search</span>
+              <input id="objectFilter" type="text" placeholder="Buscar objeto"
+                class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg pl-7 pr-2 py-1.5 text-[10px] text-on-surface focus:ring-1 focus:ring-primary outline-none"/>
+            </div>
+            <button type="button" id="btnExpandAll" class="px-2 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high rounded border border-outline-variant/20">+</button>
+            <button type="button" id="btnCollapseAll" class="px-2 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high rounded border border-outline-variant/20">-</button>
+          </div>
+          <div id="objectsEditor"></div>
+        </div>
+      </div>
+
       <!-- Tab: Stitch Settings -->
-      <div id="inspPanelStitch">
+      <div id="inspPanelStitch" class="hidden">
         <div class="space-y-2 mb-4">
           <label class="block text-[10px] uppercase tracking-widest text-outline">Tipo de Ponto</label>
           <select id="inspFillType" class="inspector-select"></select>
@@ -646,7 +704,7 @@
             <label class="text-[10px] uppercase tracking-widest text-outline">Densidade</label>
             <span id="inspDensityVal" class="text-xs font-mono text-primary">0.40mm</span>
           </div>
-          <input type="range" class="custom-range" min="1" max="10" value="4" oninput="document.getElementById('inspDensityVal').textContent = (this.value * 0.1).toFixed(2) + 'mm'"/>
+          <input id="inspDensityRange" type="range" class="custom-range" min="1" max="10" value="4" oninput="document.getElementById('inspDensityVal').textContent = (this.value * 0.1).toFixed(2) + 'mm'"/>
         </div>
 
         <div class="space-y-3 mb-4">
@@ -654,7 +712,7 @@
             <label class="text-[10px] uppercase tracking-widest text-outline">Compensação de Encolhimento</label>
             <span id="inspShrinkVal" class="text-xs font-mono text-primary">0.15mm</span>
           </div>
-          <input type="range" class="custom-range" min="0" max="20" value="3" oninput="document.getElementById('inspShrinkVal').textContent = (this.value * 0.05).toFixed(2) + 'mm'"/>
+          <input id="inspShrinkRange" type="range" class="custom-range" min="0" max="20" value="3" oninput="document.getElementById('inspShrinkVal').textContent = (this.value * 0.05).toFixed(2) + 'mm'"/>
         </div>
 
         <div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low/50 border border-outline-variant/10 mb-4">
@@ -697,7 +755,7 @@
       <!-- Tab: Layers / Object Tree -->
       <div id="inspPanelLayers" class="hidden">
         <label class="block text-[10px] uppercase tracking-widest text-outline mb-3">Árvore de Objetos</label>
-        <div id="inspObjectTree" class="space-y-1">
+        <div id="inspObjectTree" class="space-y-1 max-h-[52vh] overflow-y-auto pr-1">
           <div class="flex items-center gap-3 p-2 rounded-lg bg-primary/10 border-l-2 border-primary">
             <span class="material-symbols-outlined text-primary text-sm">account_tree</span>
             <div class="flex-1">
@@ -718,6 +776,7 @@
         class="w-full py-2.5 rounded text-on-primary font-bold text-sm bg-gradient-to-br from-primary to-primary-container hover:brightness-110 active:opacity-80 transition-all">
         Gerar Arquivo de Máquina
       </button>
+    </div>
     </div>
   </aside>
 

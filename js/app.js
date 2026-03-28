@@ -80,10 +80,17 @@ const stageTitle    = el("stageTitle");
 const stagePercent  = el("stagePercent");
 const stageBarFill  = el("stageBarFill");
 const stageSubtext  = el("stageSubtext");
+const stageTitleInline = el("stageTitleInline");
+const stagePercentInline = el("stagePercentInline");
+const stageBarFillInline = el("stageBarFillInline");
+const stageSubtextInline = el("stageSubtextInline");
 const recentProjectsGrid = el("recentProjectsGrid");
 const objectPreviewPopup = el("objectPreviewPopup");
 const objectPreviewImage = el("objectPreviewImage");
 const objectPreviewLabel = el("objectPreviewLabel");
+const proTipsSection = el("proTipsSection");
+const btnHideProTips = el("btnHideProTips");
+const uploadMainSection = el("uploadMainSection");
 
 // View elements
 const dashView       = el("dashView");
@@ -100,8 +107,15 @@ const inspFillType = el("inspFillType");
 const inspFillType2 = el("inspFillType2");
 const inspOutlineType = el("inspOutlineType");
 const inspOutlineWidth = el("inspOutlineWidth");
+const inspDensityRange = el("inspDensityRange");
+const inspShrinkRange = el("inspShrinkRange");
 const inspAutoUnderlayToggle = el("inspAutoUnderlayToggle");
 const inspAutoUnderlayThumb = el("inspAutoUnderlayThumb");
+const btnInspectorCollapse = el("btnInspectorCollapse");
+const inspectorResizeHandle = el("inspectorResizeHandle");
+const previewZoomRange = el("previewZoomRange");
+const previewZoomPct = el("previewZoomPct");
+const previewZoomBadge = el("previewZoomBadge");
 const btnGenerateMachine = el("btnGenerateMachine");
 
 // ── View Switching ──────────────────────────────────────────
@@ -149,8 +163,8 @@ function switchToEditorView(e) {
 
 // Inspector Tab Switching
 function switchInspTab(tab, btn) {
-  const panels = { stitch: "inspPanelStitch", fill: "inspPanelFill", layers: "inspPanelLayers" };
-  const buttons = { stitch: "inspTabStitch", fill: "inspTabFill", layers: "inspTabLayers" };
+  const panels = { props: "inspPanelProps", stitch: "inspPanelStitch", fill: "inspPanelFill", layers: "inspPanelLayers" };
+  const buttons = { props: "inspTabProps", stitch: "inspTabStitch", fill: "inspTabFill", layers: "inspTabLayers" };
 
   Object.keys(panels).forEach(k => {
     const panel = el(panels[k]);
@@ -220,6 +234,13 @@ let autoUnderlayEnabled = true;
 const underlayBackupByObjectId = new Map();
 
 const RECENT_PROJECTS_KEY = "converter.recentProjects";
+const UI_SETTINGS_KEY = "converter.uiSettings";
+const DEFAULT_UI_SETTINGS = {
+  hideProTips: false,
+  inspectorCollapsed: false,
+  inspectorWidth: 360,
+  previewZoomPct: 100,
+};
 
 // ── Init Selects ────────────────────────────────────────────
 function initColorSelector() {
@@ -399,10 +420,10 @@ function setNetworkActionButtonsDisabled(disabled) {
 
 function setStageProgress(stage, value, subtext) {
   const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
-  if (stageTitle) stageTitle.textContent = stage;
-  if (stagePercent) stagePercent.textContent = `${safeValue.toFixed(0)}%`;
-  if (stageBarFill) stageBarFill.style.width = `${safeValue}%`;
-  if (stageSubtext) stageSubtext.textContent = subtext;
+  [stageTitle, stageTitleInline].forEach((node) => { if (node) node.textContent = stage; });
+  [stagePercent, stagePercentInline].forEach((node) => { if (node) node.textContent = `${safeValue.toFixed(0)}%`; });
+  [stageBarFill, stageBarFillInline].forEach((node) => { if (node) node.style.width = `${safeValue}%`; });
+  [stageSubtext, stageSubtextInline].forEach((node) => { if (node) node.textContent = subtext; });
 }
 
 function beginStageProgress(stage) {
@@ -460,6 +481,62 @@ function saveRecentProjects(list) {
   }
 }
 
+function loadUiSettings() {
+  try {
+    const raw = localStorage.getItem(UI_SETTINGS_KEY);
+    if (!raw) return { ...DEFAULT_UI_SETTINGS };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_UI_SETTINGS, ...(parsed || {}) };
+  } catch (_) {
+    return { ...DEFAULT_UI_SETTINGS };
+  }
+}
+
+function saveUiSettings(next) {
+  const merged = { ...loadUiSettings(), ...(next || {}) };
+  try {
+    localStorage.setItem(UI_SETTINGS_KEY, JSON.stringify(merged));
+  } catch (_) {
+    // Ignora falha de storage.
+  }
+  return merged;
+}
+
+function applyProTipsVisibility(hidden) {
+  if (!proTipsSection) return;
+  proTipsSection.classList.toggle("hidden", !!hidden);
+  if (uploadMainSection) {
+    uploadMainSection.classList.toggle("lg:col-span-8", !hidden);
+    uploadMainSection.classList.toggle("lg:col-span-12", !!hidden);
+  }
+}
+
+function applyPreviewZoom(pct) {
+  const value = Math.max(50, Math.min(300, Number(pct || 100)));
+  if (previewZoomRange) previewZoomRange.value = String(value);
+  if (previewZoomPct) previewZoomPct.textContent = `${value}%`;
+  if (previewZoomBadge) previewZoomBadge.textContent = `${value}% VISOR`;
+  if (editorPreview) {
+    editorPreview.style.transformOrigin = "center center";
+    editorPreview.style.transform = `scale(${(value / 100).toFixed(2)})`;
+  }
+  saveUiSettings({ previewZoomPct: value });
+}
+
+function setInspectorCollapsed(collapsed) {
+  if (!editorInspector) return;
+  const next = !!collapsed;
+  editorInspector.classList.toggle("inspector-collapsed", next);
+  saveUiSettings({ inspectorCollapsed: next });
+}
+
+function setInspectorWidth(widthPx) {
+  if (!editorInspector) return;
+  const clamped = Math.max(280, Math.min(760, Number(widthPx || 360)));
+  editorInspector.style.width = `${clamped}px`;
+  saveUiSettings({ inspectorWidth: clamped });
+}
+
 function renderRecentProjects() {
   if (!recentProjectsGrid) return;
   const items = loadRecentProjects();
@@ -495,7 +572,7 @@ function addRecentProject(entry) {
   const list = loadRecentProjects();
   const filtered = list.filter((x) => x.id !== entry.id);
   filtered.unshift(entry);
-  saveRecentProjects(filtered.slice(0, 12));
+  saveRecentProjects(filtered.slice(0, 5));
   renderRecentProjects();
 }
 
@@ -822,6 +899,47 @@ function buildConvertFormData() {
   return fd;
 }
 
+function applyAutoPunchRecommendations(analysis) {
+  const recommended = analysis?.recommended || {};
+  const globalCfg = recommended.global || analysis?.defaults || {};
+
+  if (el("qualityPreset") && recommended.quality_preset) {
+    el("qualityPreset").value = String(recommended.quality_preset);
+  }
+  if (el("detail") && recommended.detail) {
+    el("detail").value = String(recommended.detail);
+  }
+  if (colorsSelect && Number.isFinite(Number(recommended.colors))) {
+    const c = Math.max(1, Math.min(24, Number(recommended.colors)));
+    colorsSelect.value = String(c);
+  }
+
+  if (bulkFillType && globalCfg.fill_type) bulkFillType.value = String(globalCfg.fill_type);
+  if (bulkDensity && globalCfg.density) bulkDensity.value = String(globalCfg.density);
+  if (bulkShrink && globalCfg.shrink_comp_mm !== undefined) bulkShrink.value = String(Number(globalCfg.shrink_comp_mm).toFixed(2));
+  if (bulkOutlineType && globalCfg.outline_type) bulkOutlineType.value = String(globalCfg.outline_type);
+  if (bulkOutlineWidth && globalCfg.outline_width_mm !== undefined) bulkOutlineWidth.value = String(Number(globalCfg.outline_width_mm));
+  if (bulkOutlinePull && globalCfg.outline_pull_comp_mm !== undefined) bulkOutlinePull.value = String(Number(globalCfg.outline_pull_comp_mm));
+  if (bulkOutlineOverlap && globalCfg.outline_overlap_mm !== undefined) bulkOutlineOverlap.value = String(Number(globalCfg.outline_overlap_mm));
+
+  const underlay = normalizeUnderlayValue(globalCfg.underlay, "medium");
+  if (bulkUnderlay) bulkUnderlay.value = underlay;
+  setAutoUnderlayToggleUI(underlay !== "none");
+
+  if (inspDensityRange && bulkDensity) {
+    const map = { low: 2, medium: 5, high: 8 };
+    inspDensityRange.value = String(map[bulkDensity.value] || 5);
+    const label = el("inspDensityVal");
+    if (label) label.textContent = (Number(inspDensityRange.value) * 0.1).toFixed(2) + "mm";
+  }
+  if (inspShrinkRange && bulkShrink) {
+    const shr = Number(bulkShrink.value || 0.4);
+    inspShrinkRange.value = String(Math.max(0, Math.min(20, Math.round(shr / 0.05))));
+    const label = el("inspShrinkVal");
+    if (label) label.textContent = (Number(inspShrinkRange.value) * 0.05).toFixed(2) + "mm";
+  }
+}
+
 // ── Convert ─────────────────────────────────────────────────
 async function runConvert({ silent = false } = {}) {
   if (requestInFlight) {
@@ -925,7 +1043,7 @@ function scheduleAutoPreviewUpdate() {
       autoPreviewRunning = false;
       if (autoPreviewPending) { autoPreviewPending = false; scheduleAutoPreviewUpdate(); }
     }
-  }, 850);
+  }, 1500);
 }
 
 // ── Upload Zone Drag & Drop ──────────────────────────────────
@@ -1051,9 +1169,93 @@ btnCollapseAll?.addEventListener("click", () => {
 });
 
 btnApplyBulk?.addEventListener("click", () => {
+  if (!autoPunchModel?.analysis?.objects?.length) {
+    setStatus("Execute a perfuração automática para aplicar ajustes globais.", "info");
+    return;
+  }
+  beginStageProgress("Aplicar ajustes");
   applyBulkToAllObjects();
+  endStageProgress("Aplicar ajustes", true, "Ajustes aplicados. Recalculando pré-visualização...");
+  scheduleAutoPreviewUpdate();
   setStatus("Ajustes globais aplicados aos objetos.", "ok");
 });
+
+btnConvert?.addEventListener("click", (ev) => {
+  // O botão pode estar fora do <form> no layout atual, então acionamos manualmente.
+  ev.preventDefault();
+  if (requestInFlight) {
+    setStatus("Aguarde a conclusão da ação em andamento.", "info");
+    return;
+  }
+  runConvert({ silent: false }).catch((err) => {
+    setStatus(`Falha na conversão: ${err.message}`, "error");
+  });
+});
+
+[
+  bulkFillType,
+  bulkDensity,
+  bulkUnderlay,
+  bulkShrink,
+  bulkOutlineType,
+  bulkOutlineWidth,
+  bulkOutlinePull,
+  bulkOutlineOverlap,
+].forEach((input) => {
+  input?.addEventListener("change", () => {
+    if (!autoPunchModel?.analysis?.objects?.length) return;
+    applyBulkToAllObjects();
+    scheduleAutoPreviewUpdate();
+  });
+});
+
+inspDensityRange?.addEventListener("input", () => {
+  const v = Number(inspDensityRange.value || 4);
+  const density = v <= 3 ? "low" : v <= 7 ? "medium" : "high";
+  if (bulkDensity) bulkDensity.value = density;
+  if (!autoPunchModel?.analysis?.objects?.length) return;
+  applyBulkToAllObjects();
+  scheduleAutoPreviewUpdate();
+});
+
+inspShrinkRange?.addEventListener("input", () => {
+  const v = Number(inspShrinkRange.value || 3) * 0.05;
+  if (bulkShrink) bulkShrink.value = v.toFixed(2);
+  if (!autoPunchModel?.analysis?.objects?.length) return;
+  applyBulkToAllObjects();
+  scheduleAutoPreviewUpdate();
+});
+
+previewZoomRange?.addEventListener("input", () => {
+  applyPreviewZoom(Number(previewZoomRange.value || 100));
+});
+
+btnHideProTips?.addEventListener("click", () => {
+  applyProTipsVisibility(true);
+  saveUiSettings({ hideProTips: true });
+});
+
+btnInspectorCollapse?.addEventListener("click", () => {
+  const collapsed = !!editorInspector?.classList.contains("inspector-collapsed");
+  setInspectorCollapsed(!collapsed);
+});
+
+if (inspectorResizeHandle && editorInspector) {
+  let resizing = false;
+  inspectorResizeHandle.addEventListener("mousedown", (ev) => {
+    if (editorInspector.classList.contains("inspector-collapsed")) return;
+    ev.preventDefault();
+    resizing = true;
+  });
+  document.addEventListener("mousemove", (ev) => {
+    if (!resizing) return;
+    const nextWidth = window.innerWidth - ev.clientX;
+    setInspectorWidth(nextWidth);
+  });
+  document.addEventListener("mouseup", () => {
+    resizing = false;
+  });
+}
 
 inspFillType?.addEventListener("change", () => {
   if (inspFillType2) inspFillType2.value = inspFillType.value;
@@ -1110,8 +1312,8 @@ objectsEditor?.addEventListener("input", ev => {
       if (sw && target instanceof HTMLInputElement) sw.style.background = target.value;
     }
     renderPaletteEditor();
-    scheduleAutoPreviewUpdate();
   }
+  scheduleAutoPreviewUpdate();
 });
 
 objectsEditor?.addEventListener("change", ev => {
@@ -1120,7 +1322,8 @@ objectsEditor?.addEventListener("change", ev => {
   const prop = target.getAttribute("data-prop");
   if (!prop) return;
   readEditorIntoModel();
-  if (prop === "color") { renderPaletteEditor(); scheduleAutoPreviewUpdate(); }
+  if (prop === "color") renderPaletteEditor();
+  scheduleAutoPreviewUpdate();
 });
 
 el("image")?.addEventListener("change", async e => {
@@ -1170,6 +1373,7 @@ btnAutoPunch?.addEventListener("click", async () => {
     }
 
     autoPunchModel = await res.json();
+    applyAutoPunchRecommendations(autoPunchModel?.analysis);
     renderObjectsEditor();
 
     const objects = autoPunchModel?.analysis?.objects || [];
@@ -1265,6 +1469,13 @@ el("btnNovaDig")?.addEventListener("click", () => {
 });
 
 // ── Init ─────────────────────────────────────────────────────
+const initialUiSettings = loadUiSettings();
+applyProTipsVisibility(!!initialUiSettings.hideProTips);
+setInspectorWidth(initialUiSettings.inspectorWidth);
+setInspectorCollapsed(!!initialUiSettings.inspectorCollapsed);
+applyPreviewZoom(initialUiSettings.previewZoomPct);
+switchInspTab("props");
+
 switchToDashView();
 renderRecentProjects();
 setStageProgress("Aguardando", 0, "Sem processamento em execução.");
