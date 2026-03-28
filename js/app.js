@@ -73,6 +73,7 @@ const apiSettingsBackdrop = el("apiSettingsBackdrop");
 const btnCloseApiSettings = el("btnCloseApiSettings");
 const btnCancelApiSettings = el("btnCancelApiSettings");
 const btnSaveApiSettings = el("btnSaveApiSettings");
+const autoPreviewEnabledInput = el("autoPreviewEnabled");
 const qualityAlert  = el("qualityAlert");
 const barPoints     = el("barPoints");
 const barLine       = el("barLine");
@@ -80,10 +81,9 @@ const stageTitle    = el("stageTitle");
 const stagePercent  = el("stagePercent");
 const stageBarFill  = el("stageBarFill");
 const stageSubtext  = el("stageSubtext");
-const stageTitleInline = el("stageTitleInline");
-const stagePercentInline = el("stagePercentInline");
-const stageBarFillInline = el("stageBarFillInline");
-const stageSubtextInline = el("stageSubtextInline");
+const stageTitleCompact = el("stageTitleCompact");
+const stagePercentCompact = el("stagePercentCompact");
+const stageBarFillCompact = el("stageBarFillCompact");
 const recentProjectsGrid = el("recentProjectsGrid");
 const objectPreviewPopup = el("objectPreviewPopup");
 const objectPreviewImage = el("objectPreviewImage");
@@ -116,6 +116,12 @@ const inspectorResizeHandle = el("inspectorResizeHandle");
 const previewZoomRange = el("previewZoomRange");
 const previewZoomPct = el("previewZoomPct");
 const previewZoomBadge = el("previewZoomBadge");
+const hoopOverlay = el("hoopOverlay");
+const hoopSizeRange = el("hoopSizeRange");
+const hoopSizePx = el("hoopSizePx");
+const btnTogglePropsPanel = el("btnTogglePropsPanel");
+const propsPanelBody = el("propsPanelBody");
+const propsPanelChevron = el("propsPanelChevron");
 const btnGenerateMachine = el("btnGenerateMachine");
 
 // ── View Switching ──────────────────────────────────────────
@@ -190,6 +196,8 @@ function loadSavedApiBase() {
   let saved = "";
   try { saved = localStorage.getItem(API_BASE_STORAGE_KEY) || ""; } catch (_) {}
   apiBaseInput.value = normalizeApiBase(saved) || DEFAULT_API_BASE_URL;
+  const settings = loadUiSettings();
+  if (autoPreviewEnabledInput) autoPreviewEnabledInput.checked = !!settings.autoPreviewEnabled;
 }
 
 function saveApiBase() {
@@ -201,6 +209,9 @@ function saveApiBase() {
   }
   apiBaseInput.value = normalized;
   try { localStorage.setItem(API_BASE_STORAGE_KEY, normalized); } catch (_) {}
+  if (autoPreviewEnabledInput) {
+    saveUiSettings({ autoPreviewEnabled: !!autoPreviewEnabledInput.checked });
+  }
   closeApiSettings();
   setStatus(`API configurada para ${normalized}`, "ok");
   return true;
@@ -240,6 +251,9 @@ const DEFAULT_UI_SETTINGS = {
   inspectorCollapsed: false,
   inspectorWidth: 360,
   previewZoomPct: 100,
+  autoPreviewEnabled: true,
+  hoopSizePx: 460,
+  propsPanelCollapsed: false,
 };
 
 // ── Init Selects ────────────────────────────────────────────
@@ -420,10 +434,13 @@ function setNetworkActionButtonsDisabled(disabled) {
 
 function setStageProgress(stage, value, subtext) {
   const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
-  [stageTitle, stageTitleInline].forEach((node) => { if (node) node.textContent = stage; });
-  [stagePercent, stagePercentInline].forEach((node) => { if (node) node.textContent = `${safeValue.toFixed(0)}%`; });
-  [stageBarFill, stageBarFillInline].forEach((node) => { if (node) node.style.width = `${safeValue}%`; });
-  [stageSubtext, stageSubtextInline].forEach((node) => { if (node) node.textContent = subtext; });
+  if (stageTitle) stageTitle.textContent = stage;
+  if (stagePercent) stagePercent.textContent = `${safeValue.toFixed(0)}%`;
+  if (stageBarFill) stageBarFill.style.width = `${safeValue}%`;
+  if (stageSubtext) stageSubtext.textContent = subtext;
+  if (stageTitleCompact) stageTitleCompact.textContent = stage;
+  if (stagePercentCompact) stagePercentCompact.textContent = `${safeValue.toFixed(0)}%`;
+  if (stageBarFillCompact) stageBarFillCompact.style.width = `${safeValue}%`;
 }
 
 function beginStageProgress(stage) {
@@ -521,6 +538,33 @@ function applyPreviewZoom(pct) {
     editorPreview.style.transform = `scale(${(value / 100).toFixed(2)})`;
   }
   saveUiSettings({ previewZoomPct: value });
+}
+
+function applyHoopSize(px) {
+  const value = Math.max(320, Math.min(620, Number(px || 460)));
+  if (hoopSizeRange) hoopSizeRange.value = String(value);
+  if (hoopSizePx) hoopSizePx.textContent = `${value}px`;
+  if (hoopOverlay) {
+    hoopOverlay.style.width = `${value}px`;
+    hoopOverlay.style.height = `${value}px`;
+  }
+  if (canvasInner) {
+    const inner = Math.round(value * 0.69);
+    canvasInner.style.width = `${inner}px`;
+    canvasInner.style.height = `${inner}px`;
+  }
+  saveUiSettings({ hoopSizePx: value });
+}
+
+function isAutoPreviewEnabled() {
+  return autoPreviewEnabledInput ? !!autoPreviewEnabledInput.checked : !!loadUiSettings().autoPreviewEnabled;
+}
+
+function setPropsPanelCollapsed(collapsed) {
+  const next = !!collapsed;
+  if (propsPanelBody) propsPanelBody.classList.toggle("hidden", next);
+  if (propsPanelChevron) propsPanelChevron.textContent = next ? "expand_more" : "expand_less";
+  saveUiSettings({ propsPanelCollapsed: next });
 }
 
 function setInspectorCollapsed(collapsed) {
@@ -786,7 +830,7 @@ function updateInspectorObjectTree() {
   const objects = autoPunchModel?.analysis?.objects || [];
   if (!objects.length) return;
 
-  const treeHtml = objects.slice(0, 8).map((obj, i) => `
+  const treeHtml = objects.map((obj, i) => `
     <div class="flex items-center gap-2 p-2 rounded-lg ${i === 0 ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-surface-container-highest'} transition-colors cursor-pointer">
       <span class="inline-block w-3 h-3 rounded flex-shrink-0" style="background:${esc(obj.color)}"></span>
       <div class="flex-1 min-w-0">
@@ -799,7 +843,7 @@ function updateInspectorObjectTree() {
     </div>
   `).join("");
 
-  inspObjectTree.innerHTML = treeHtml + (objects.length > 8 ? `<p class="text-[9px] text-outline mt-2 text-center">+${objects.length - 8} objetos na lista principal</p>` : "");
+  inspObjectTree.innerHTML = treeHtml;
 }
 
 function applyPaletteColorToLabel(labelIndex, colorHex) {
@@ -1030,6 +1074,7 @@ async function runConvert({ silent = false } = {}) {
 
 // ── Auto-Preview ─────────────────────────────────────────────
 function scheduleAutoPreviewUpdate() {
+  if (!isAutoPreviewEnabled()) return;
   if (autoPreviewTimer) clearTimeout(autoPreviewTimer);
   autoPreviewTimer = setTimeout(async () => {
     if (autoPreviewRunning) { autoPreviewPending = true; return; }
@@ -1228,6 +1273,25 @@ inspShrinkRange?.addEventListener("input", () => {
 
 previewZoomRange?.addEventListener("input", () => {
   applyPreviewZoom(Number(previewZoomRange.value || 100));
+});
+
+hoopSizeRange?.addEventListener("input", () => {
+  applyHoopSize(Number(hoopSizeRange.value || 460));
+});
+
+autoPreviewEnabledInput?.addEventListener("change", () => {
+  const enabled = !!autoPreviewEnabledInput.checked;
+  saveUiSettings({ autoPreviewEnabled: enabled });
+  if (!enabled && autoPreviewTimer) {
+    clearTimeout(autoPreviewTimer);
+    autoPreviewTimer = null;
+  }
+  setStatus(enabled ? "Preview automático habilitado." : "Preview automático desabilitado.", "info");
+});
+
+btnTogglePropsPanel?.addEventListener("click", () => {
+  const collapsed = !!propsPanelBody?.classList.contains("hidden");
+  setPropsPanelCollapsed(!collapsed);
 });
 
 btnHideProTips?.addEventListener("click", () => {
@@ -1474,6 +1538,9 @@ applyProTipsVisibility(!!initialUiSettings.hideProTips);
 setInspectorWidth(initialUiSettings.inspectorWidth);
 setInspectorCollapsed(!!initialUiSettings.inspectorCollapsed);
 applyPreviewZoom(initialUiSettings.previewZoomPct);
+applyHoopSize(initialUiSettings.hoopSizePx);
+setPropsPanelCollapsed(!!initialUiSettings.propsPanelCollapsed);
+if (autoPreviewEnabledInput) autoPreviewEnabledInput.checked = !!initialUiSettings.autoPreviewEnabled;
 switchInspTab("props");
 
 switchToDashView();
