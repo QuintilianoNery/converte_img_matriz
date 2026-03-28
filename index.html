@@ -503,6 +503,7 @@
               <div class="objField">
                 <label>Sob-costura</label>
                 <select id="bulkUnderlay" class="inspector-select">
+                  <option value="none">Desligada</option>
                   <option value="low">Baixa</option>
                   <option value="medium" selected>Média</option>
                   <option value="high">Alta</option>
@@ -661,9 +662,19 @@
             <span class="material-symbols-outlined text-on-surface-variant text-sm">layers_clear</span>
             <span class="text-xs font-medium">Gerar Sob-costura Automaticamente</span>
           </div>
-          <div class="w-8 h-4 bg-primary rounded-full relative cursor-pointer" onclick="this.classList.toggle('bg-primary'); this.classList.toggle('bg-outline-variant')">
-            <div class="absolute right-0.5 top-0.5 w-3 h-3 bg-surface rounded-full transition-transform"></div>
-          </div>
+          <button
+            type="button"
+            id="inspAutoUnderlayToggle"
+            class="w-9 h-5 bg-primary rounded-full relative cursor-pointer transition-colors"
+            role="switch"
+            aria-checked="true"
+            aria-label="Gerar Sob-costura Automaticamente"
+          >
+            <span
+              id="inspAutoUnderlayThumb"
+              class="absolute left-0.5 top-0.5 w-4 h-4 bg-surface rounded-full transition-transform transform translate-x-4"
+            ></span>
+          </button>
         </div>
       </div>
 

@@ -100,6 +100,8 @@ const inspFillType = el("inspFillType");
 const inspFillType2 = el("inspFillType2");
 const inspOutlineType = el("inspOutlineType");
 const inspOutlineWidth = el("inspOutlineWidth");
+const inspAutoUnderlayToggle = el("inspAutoUnderlayToggle");
+const inspAutoUnderlayThumb = el("inspAutoUnderlayThumb");
 const btnGenerateMachine = el("btnGenerateMachine");
 
 // ── View Switching ──────────────────────────────────────────
@@ -214,6 +216,8 @@ let stageProgressValue = 0;
 let stageProgressTimer = null;
 let sourceImagePreviewUrl = "";
 let sourceImageEl = new Image();
+let autoUnderlayEnabled = true;
+const underlayBackupByObjectId = new Map();
 
 const RECENT_PROJECTS_KEY = "converter.recentProjects";
 
@@ -297,6 +301,87 @@ function esc(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function normalizeUnderlayValue(value, fallback = "medium") {
+  const v = String(value || "").trim().toLowerCase();
+  if (["none", "off", "disabled", "desligada", "desligado"].includes(v)) return "none";
+  if (["low", "medium", "high"].includes(v)) return v;
+  return fallback;
+}
+
+function isUnderlayDisabledValue(value) {
+  return normalizeUnderlayValue(value, "none") === "none";
+}
+
+function setAutoUnderlayToggleUI(enabled) {
+  autoUnderlayEnabled = !!enabled;
+  if (inspAutoUnderlayToggle) {
+    inspAutoUnderlayToggle.setAttribute("aria-checked", autoUnderlayEnabled ? "true" : "false");
+    inspAutoUnderlayToggle.classList.toggle("bg-primary", autoUnderlayEnabled);
+    inspAutoUnderlayToggle.classList.toggle("bg-outline-variant", !autoUnderlayEnabled);
+  }
+  if (inspAutoUnderlayThumb) {
+    inspAutoUnderlayThumb.classList.toggle("translate-x-4", autoUnderlayEnabled);
+    inspAutoUnderlayThumb.classList.toggle("translate-x-0", !autoUnderlayEnabled);
+  }
+  if (bulkUnderlay) {
+    bulkUnderlay.disabled = !autoUnderlayEnabled;
+    bulkUnderlay.classList.toggle("opacity-50", !autoUnderlayEnabled);
+    if (!autoUnderlayEnabled) {
+      bulkUnderlay.value = "none";
+    } else if (isUnderlayDisabledValue(bulkUnderlay.value)) {
+      bulkUnderlay.value = "medium";
+    }
+  }
+  objectsEditor?.querySelectorAll("select[data-prop='underlay']").forEach((input) => {
+    input.disabled = !autoUnderlayEnabled;
+    input.classList.toggle("opacity-50", !autoUnderlayEnabled);
+  });
+}
+
+function syncAutoUnderlayStateFromModel() {
+  const objects = autoPunchModel?.analysis?.objects || [];
+  if (!objects.length) {
+    setAutoUnderlayToggleUI(true);
+    return;
+  }
+  const enabled = objects.some((obj) => !isUnderlayDisabledValue(obj.underlay));
+  setAutoUnderlayToggleUI(enabled);
+}
+
+function toggleAutoUnderlay(nextEnabled) {
+  const objects = autoPunchModel?.analysis?.objects || [];
+  if (!objects.length) {
+    setStatus("Execute a perfuração automática para usar este controle.", "info");
+    setAutoUnderlayToggleUI(true);
+    return;
+  }
+
+  readEditorIntoModel();
+  const enabled = typeof nextEnabled === "boolean" ? nextEnabled : !autoUnderlayEnabled;
+
+  if (!enabled) {
+    objects.forEach((obj) => {
+      const current = normalizeUnderlayValue(obj.underlay, "medium");
+      if (current !== "none") {
+        underlayBackupByObjectId.set(obj.id, current);
+      }
+      obj.underlay = "none";
+    });
+    setStatus("Sob-costura automática desabilitada.", "ok");
+  } else {
+    const fallback = normalizeUnderlayValue(bulkUnderlay?.value, "medium");
+    objects.forEach((obj) => {
+      const restored = normalizeUnderlayValue(underlayBackupByObjectId.get(obj.id), fallback);
+      obj.underlay = restored === "none" ? "medium" : restored;
+    });
+    setStatus("Sob-costura automática habilitada.", "ok");
+  }
+
+  setAutoUnderlayToggleUI(enabled);
+  renderObjectsEditor();
+  scheduleAutoPreviewUpdate();
 }
 
 function setNetworkActionButtonsDisabled(disabled) {
@@ -548,9 +633,10 @@ function renderObjectsEditor() {
           <div class="objField">
             <label>Sob-costura</label>
             <select data-prop="underlay" class="inspector-select">
-              <option value="low" ${obj.underlay === "low" ? "selected" : ""}>Baixa</option>
-              <option value="medium" ${obj.underlay !== "low" && obj.underlay !== "high" ? "selected" : ""}>Média</option>
-              <option value="high" ${obj.underlay === "high" ? "selected" : ""}>Alta</option>
+              <option value="none" ${normalizeUnderlayValue(obj.underlay, "medium") === "none" ? "selected" : ""}>Desligada</option>
+              <option value="low" ${normalizeUnderlayValue(obj.underlay, "medium") === "low" ? "selected" : ""}>Baixa</option>
+              <option value="medium" ${normalizeUnderlayValue(obj.underlay, "medium") === "medium" ? "selected" : ""}>Média</option>
+              <option value="high" ${normalizeUnderlayValue(obj.underlay, "medium") === "high" ? "selected" : ""}>Alta</option>
             </select>
           </div>
           <div class="objField">
@@ -579,6 +665,7 @@ function renderObjectsEditor() {
   renderPaletteEditor();
   updateInspectorObjectTree();
   applyObjectFilter();
+  syncAutoUnderlayStateFromModel();
 
   const firstEnabled = objects.find((o) => o.enabled) || objects[0];
   if (firstEnabled) {
@@ -708,7 +795,7 @@ function getDesignConfig() {
       quality_preset: qp,
       density: defaults.density || "medium",
       shrink_comp_mm: Number(defaults.shrink_comp_mm ?? 0.4),
-      underlay: defaults.underlay || "medium",
+      underlay: autoUnderlayEnabled ? (defaults.underlay || "medium") : "none",
       outline: true,
       outline_keepout_mm: Number(defaults.outline_keepout_mm ?? 0),
       outline_type: defaults.outline_type || "satin",
@@ -798,7 +885,6 @@ async function runConvert({ silent = false } = {}) {
     }
 
     const points = Number(data?.meta?.total_stitches_approx || 0);
-    updateFooterStats(points);
 
     addRecentProject({
       id: String(data.job_id || Date.now()),
@@ -869,6 +955,16 @@ async function handleFileSelected(file) {
   const q = await checkQuality(file);
   if (q && q.minSide < 1200) qualityAlert.classList.remove("hidden");
 
+  // New source image invalidates previous autopunch metrics/config.
+  autoPunchModel = null;
+  underlayBackupByObjectId.clear();
+  setAutoUnderlayToggleUI(true);
+  objectsEditor.innerHTML = "";
+  if (paletteEditor) paletteEditor.innerHTML = "";
+  editorCard.classList.add("hidden");
+  hideObjectPreviewPopup();
+  updateFooterStats(0);
+
   if (sourceImagePreviewUrl) {
     URL.revokeObjectURL(sourceImagePreviewUrl);
     sourceImagePreviewUrl = "";
@@ -912,6 +1008,8 @@ function doReset() {
   btnReset.disabled = true;
   qualityAlert.classList.add("hidden");
   autoPunchModel = null;
+  underlayBackupByObjectId.clear();
+  setAutoUnderlayToggleUI(true);
   objectsEditor.innerHTML = "";
   if (paletteEditor) paletteEditor.innerHTML = "";
   if (editorPreview) { editorPreview.src = ""; editorPreview.classList.add("hidden"); }
@@ -973,6 +1071,10 @@ inspOutlineType?.addEventListener("change", () => {
 
 inspOutlineWidth?.addEventListener("change", () => {
   applyInspectorSelections();
+});
+
+inspAutoUnderlayToggle?.addEventListener("click", () => {
+  toggleAutoUnderlay();
 });
 
 objectFilter?.addEventListener("input", () => applyObjectFilter());

@@ -90,6 +90,7 @@ DENSITY_FACTORS = {
 }
 
 UNDERLAY_FACTORS = {
+    "none": 0.0,
     "low": 2.1,
     "medium": 1.65,
     "high": 1.25,
@@ -184,6 +185,17 @@ def _normalize_outline_type(value: str | None) -> str:
         return "satin"
     key = str(value).strip().lower()
     return OUTLINE_TYPE_ALIASES.get(key, "satin")
+
+
+def _normalize_underlay(value: str | None, default: str = "medium") -> str:
+    if value is None:
+        return default
+    key = str(value).strip().lower()
+    if key in {"none", "off", "disabled", "desligado", "desligada"}:
+        return "none"
+    if key in UNDERLAY_FACTORS:
+        return key
+    return default
 
 
 def _parse_hex_color(value: str | None):
@@ -971,7 +983,7 @@ def convert_image_to_embroidery(
     cfg_by_id = {str(o.get("id")): o for o in cfg_objects if isinstance(o, dict) and "id" in o}
 
     global_density = str(cfg_global.get("density", preset["density"])).lower()
-    global_underlay = str(cfg_global.get("underlay", preset["underlay"])).lower()
+    global_underlay = _normalize_underlay(cfg_global.get("underlay", preset["underlay"]), preset["underlay"])
     global_shrink = float(cfg_global.get("shrink_comp_mm", preset["shrink_comp_mm"]))
     global_outline = bool(cfg_global.get("outline", preset["outline"]))
     global_outline_mult = float(cfg_global.get("outline_step_mult", preset["outline_step_mult"]))
@@ -990,7 +1002,7 @@ def convert_image_to_embroidery(
             o["enabled"] = _as_bool(user_o.get("enabled", o["enabled"]), bool(o["enabled"]))
             o["fill_type"] = _normalize_fill_type(user_o.get("fill_type", o["fill_type"]))
             o["density"] = str(user_o.get("density", o["density"])).lower()
-            o["underlay"] = str(user_o.get("underlay", o["underlay"])).lower()
+            o["underlay"] = _normalize_underlay(user_o.get("underlay", o["underlay"]), o["underlay"])
             o["shrink_comp_mm"] = float(user_o.get("shrink_comp_mm", o["shrink_comp_mm"]))
             o["color"] = str(user_o.get("color", o["color"]))
             o["outline"] = _as_bool(user_o.get("outline", global_outline), global_outline)
@@ -1046,7 +1058,7 @@ def convert_image_to_embroidery(
         shrink_comp_mm = float(obj.get("shrink_comp_mm", global_shrink))
         mask = _apply_shrink_comp(mask, mm_per_px=mm_per_px, shrink_comp_mm=shrink_comp_mm)
 
-        underlay = str(obj.get("underlay", global_underlay)).lower()
+        underlay = _normalize_underlay(obj.get("underlay", global_underlay), global_underlay)
         underlay_factor = UNDERLAY_FACTORS.get(underlay, UNDERLAY_FACTORS["medium"])
 
         fill_type = _normalize_fill_type(str(obj.get("fill_type", "tatami")))
@@ -1057,12 +1069,14 @@ def convert_image_to_embroidery(
         border_mask = mask & (~inner_mask)
         outline_mask = _boundary_mask(mask)
 
-        underlay_segments = _make_segments_for_mask(
-            inner_mask if inner_mask.any() else mask,
-            mm_per_px=mm_per_px,
-            step_mm=step_obj_mm * underlay_factor,
-            fill_type="zigzag" if fill_type != "zigzag" else "tatami",
-        )
+        underlay_segments = []
+        if underlay_factor > 0:
+            underlay_segments = _make_segments_for_mask(
+                inner_mask if inner_mask.any() else mask,
+                mm_per_px=mm_per_px,
+                step_mm=step_obj_mm * underlay_factor,
+                fill_type="zigzag" if fill_type != "zigzag" else "tatami",
+            )
 
         # Auto comercial: satin na borda + tatami no miolo quando fill padrão.
         if fill_type == "tatami":
