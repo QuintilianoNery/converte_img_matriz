@@ -74,6 +74,7 @@ const btnCloseApiSettings = el("btnCloseApiSettings");
 const btnCancelApiSettings = el("btnCancelApiSettings");
 const btnSaveApiSettings = el("btnSaveApiSettings");
 const autoPreviewEnabledInput = el("autoPreviewEnabled");
+const autoQualityEnabledInput = el("autoQualityEnabled");
 const qualityAlert  = el("qualityAlert");
 const barPoints     = el("barPoints");
 const barLine       = el("barLine");
@@ -198,6 +199,7 @@ function loadSavedApiBase() {
   apiBaseInput.value = normalizeApiBase(saved) || DEFAULT_API_BASE_URL;
   const settings = loadUiSettings();
   if (autoPreviewEnabledInput) autoPreviewEnabledInput.checked = !!settings.autoPreviewEnabled;
+  if (autoQualityEnabledInput) autoQualityEnabledInput.checked = !!settings.autoQualityEnabled;
 }
 
 function saveApiBase() {
@@ -211,6 +213,9 @@ function saveApiBase() {
   try { localStorage.setItem(API_BASE_STORAGE_KEY, normalized); } catch (_) {}
   if (autoPreviewEnabledInput) {
     saveUiSettings({ autoPreviewEnabled: !!autoPreviewEnabledInput.checked });
+  }
+  if (autoQualityEnabledInput) {
+    saveUiSettings({ autoQualityEnabled: !!autoQualityEnabledInput.checked });
   }
   closeApiSettings();
   setStatus(`API configurada para ${normalized}`, "ok");
@@ -252,6 +257,7 @@ const DEFAULT_UI_SETTINGS = {
   inspectorWidth: 360,
   previewZoomPct: 100,
   autoPreviewEnabled: true,
+  autoQualityEnabled: true,
   hoopSizePx: 460,
   propsPanelCollapsed: false,
 };
@@ -558,6 +564,31 @@ function applyHoopSize(px) {
 
 function isAutoPreviewEnabled() {
   return autoPreviewEnabledInput ? !!autoPreviewEnabledInput.checked : !!loadUiSettings().autoPreviewEnabled;
+}
+
+function isAutoQualityEnabled() {
+  return autoQualityEnabledInput ? !!autoQualityEnabledInput.checked : !!loadUiSettings().autoQualityEnabled;
+}
+
+function applyMarketQualityDefaults() {
+  if (!isAutoQualityEnabled()) return;
+
+  if (el("qualityPreset")) el("qualityPreset").value = "premium_clean";
+  if (el("detail")) el("detail").value = "high";
+  if (colorsSelect) colorsSelect.value = String(Math.max(12, Number(colorsSelect.value || 16)));
+
+  if (bulkFillType) bulkFillType.value = "tatami";
+  if (bulkDensity) bulkDensity.value = "high";
+  if (bulkUnderlay) bulkUnderlay.value = "medium";
+  if (bulkShrink) bulkShrink.value = "0.35";
+  if (bulkOutlineType) bulkOutlineType.value = "satin";
+  if (bulkOutlineWidth) bulkOutlineWidth.value = "1.6";
+  if (bulkOutlinePull) bulkOutlinePull.value = "0.30";
+  if (bulkOutlineOverlap) bulkOutlineOverlap.value = "0.45";
+
+  if (autoPunchModel?.analysis?.objects?.length) {
+    applyBulkToAllObjects();
+  }
 }
 
 function setPropsPanelCollapsed(collapsed) {
@@ -944,6 +975,7 @@ function buildConvertFormData() {
 }
 
 function applyAutoPunchRecommendations(analysis) {
+  if (!isAutoQualityEnabled()) return;
   const recommended = analysis?.recommended || {};
   const globalCfg = recommended.global || analysis?.defaults || {};
 
@@ -1002,6 +1034,8 @@ async function runConvert({ silent = false } = {}) {
     if (!silent) setStatus("Informe a URL do backend (API).", "error");
     return;
   }
+
+  applyMarketQualityDefaults();
 
   const fd = buildConvertFormData();
   if (!fd) return;
@@ -1289,6 +1323,17 @@ autoPreviewEnabledInput?.addEventListener("change", () => {
   setStatus(enabled ? "Preview automático habilitado." : "Preview automático desabilitado.", "info");
 });
 
+autoQualityEnabledInput?.addEventListener("change", () => {
+  const enabled = !!autoQualityEnabledInput.checked;
+  saveUiSettings({ autoQualityEnabled: enabled });
+  if (enabled) {
+    applyMarketQualityDefaults();
+    setStatus("Qualidade automática habilitada.", "info");
+  } else {
+    setStatus("Qualidade automática desabilitada.", "info");
+  }
+});
+
 btnTogglePropsPanel?.addEventListener("click", () => {
   const collapsed = !!propsPanelBody?.classList.contains("hidden");
   setPropsPanelCollapsed(!collapsed);
@@ -1414,6 +1459,8 @@ btnAutoPunch?.addEventListener("click", async () => {
     setStatus("Informe a URL do backend (API).", "error");
     return;
   }
+
+  applyMarketQualityDefaults();
 
   const fd = new FormData();
   fd.append("image", imageFile);

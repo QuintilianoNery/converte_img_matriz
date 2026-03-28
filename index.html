@@ -148,6 +148,23 @@
   #inspectorResizeHandle:hover {
     background: rgba(76,214,255,.2);
   }
+  .label-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .label-info .material-symbols-outlined {
+    font-size: 12px;
+    color: #8b90a0;
+    cursor: help;
+  }
+  .field-help {
+    display: block;
+    margin-top: 2px;
+    font-size: 9px;
+    color: #8b90a0;
+    line-height: 1.35;
+  }
 </style>
 </head>
 <body class="bg-surface text-on-surface font-body selection:bg-primary/30 overflow-hidden h-screen flex flex-col">
@@ -180,6 +197,18 @@
         </div>
         <label class="inline-flex items-center cursor-pointer">
           <input id="autoPreviewEnabled" type="checkbox" class="sr-only peer" checked>
+          <span class="relative w-9 h-5 bg-outline-variant rounded-full peer-checked:bg-primary transition-colors">
+            <span class="absolute top-0.5 left-0.5 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
+          </span>
+        </label>
+      </div>
+      <div class="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2">
+        <div>
+          <p class="text-[11px] font-semibold text-on-surface">Configurar qualidade automaticamente</p>
+          <p class="text-[10px] text-outline">Seleciona parâmetros para acabamento de alta qualidade conforme a imagem.</p>
+        </div>
+        <label class="inline-flex items-center cursor-pointer">
+          <input id="autoQualityEnabled" type="checkbox" class="sr-only peer" checked>
           <span class="relative w-9 h-5 bg-outline-variant rounded-full peer-checked:bg-primary transition-colors">
             <span class="absolute top-0.5 left-0.5 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
           </span>
@@ -262,7 +291,7 @@
   </aside>
 
   <!-- EDITOR TOOLBOX SIDEBAR (hidden initially) -->
-  <aside id="editorToolbox" class="flex-shrink-0 w-20 bg-[#1a1c1f] border-r border-[#414754]/15 flex-col items-center py-4 overflow-y-auto hidden">
+  <aside id="editorToolbox" class="flex-shrink-0 w-24 bg-[#1a1c1f] border-r border-[#414754]/15 flex-col items-center py-4 overflow-y-auto hidden">
     <div class="mb-5 text-center">
       <span class="block text-[9px] uppercase tracking-widest text-primary font-bold">FERRAMENTAS</span>
       <span class="text-[8px] text-outline">V0.1.0</span>
@@ -357,7 +386,10 @@
             <!-- Configuration Grid -->
             <div class="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
-                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5">Tamanho</label>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Tamanho
+                  <span class="material-symbols-outlined" title="Define o tamanho final do bordado em centímetros.">info</span>
+                </label>
+                <span class="field-help">Área final aproximada do desenho na peça.</span>
                 <select id="sizeCm" name="sizeCm" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                   <option value="10">10 cm</option>
                   <option value="20">20 cm</option>
@@ -365,7 +397,10 @@
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5">Formato de Saída</label>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Formato de Saída
+                  <span class="material-symbols-outlined" title="Escolhe o formato compatível com a máquina de bordado.">info</span>
+                </label>
+                <span class="field-help">Use o formato indicado pelo fabricante da máquina.</span>
                 <select id="format" name="format" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                   <option value="PES" selected>.PES (Brother/Babylock)</option>
                   <option value="DST">.DST (Tajima)</option>
@@ -376,13 +411,19 @@
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5">Cores (quantização)</label>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Cores (quantização)
+                  <span class="material-symbols-outlined" title="Quantidade de cores que o sistema tentará preservar no bordado.">info</span>
+                </label>
+                <span class="field-help">Mais cores preservam detalhes e aumentam complexidade.</span>
                 <select id="colors" name="colors" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                   <!-- Populated by JS -->
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5">Detalhe</label>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Detalhe
+                  <span class="material-symbols-outlined" title="Controla o nível de detalhamento dos pontos gerados.">info</span>
+                </label>
+                <span class="field-help">Alto detalhe gera mais pontos e melhor definição.</span>
                 <select id="detail" name="detail" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                   <option value="low">Baixo (mais leve)</option>
                   <option value="medium" selected>Médio (padrão)</option>
@@ -390,7 +431,10 @@
                 </select>
               </div>
               <div>
-                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5">Preset de Qualidade</label>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Preset de Qualidade
+                  <span class="material-symbols-outlined" title="Aplica um conjunto de parâmetros de bordado pronto para uso.">info</span>
+                </label>
+                <span class="field-help">Premium/Clean busca acabamento de mercado.</span>
                 <select id="qualityPreset" name="qualityPreset" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
                   <option value="leve">Leve</option>
                   <option value="medio" selected>Médio</option>
@@ -598,11 +642,11 @@
     <!-- Inspector Tabs -->
     <nav class="flex border-b border-outline-variant/10">
       <button onclick="switchInspTab('props', this)" id="inspTabProps"
-        class="py-3 text-[10px] font-bold text-primary border-b border-primary flex-1 transition-colors">Propriedades</button>
+        class="py-3 text-[10px] font-bold text-primary border-b border-primary flex-1 transition-colors">Propriedades <span class="material-symbols-outlined align-middle text-[10px]" title="Configurações globais e edição dos objetos.">info</span></button>
       <button onclick="switchInspTab('stitch', this)" id="inspTabStitch"
-        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Ponto</button>
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Ponto <span class="material-symbols-outlined align-middle text-[10px]" title="Ajustes de densidade e compensação dos pontos.">info</span></button>
       <button onclick="switchInspTab('fill', this)" id="inspTabFill"
-        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Preench.</button>
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Preench. <span class="material-symbols-outlined align-middle text-[10px]" title="Configuração do tipo e espessura de preenchimento/contorno.">info</span></button>
       <button onclick="switchInspTab('layers', this)" id="inspTabLayers"
         class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Camadas</button>
     </nav>
@@ -625,11 +669,15 @@
           </h4>
           <div class="grid grid-cols-1 gap-2">
             <div class="objField">
-              <label>Preenchimento</label>
+              <label class="label-info">Preenchimento
+                <span class="material-symbols-outlined" title="Define o padrão de preenchimento principal das áreas.">info</span>
+              </label>
               <select id="bulkFillType" class="inspector-select"></select>
             </div>
             <div class="objField">
-              <label>Densidade</label>
+              <label class="label-info">Densidade
+                <span class="material-symbols-outlined" title="Controla o espaçamento entre linhas de ponto.">info</span>
+              </label>
               <select id="bulkDensity" class="inspector-select">
                 <option value="low">Baixa</option>
                 <option value="medium" selected>Média</option>
@@ -637,7 +685,9 @@
               </select>
             </div>
             <div class="objField">
-              <label>Sob-costura</label>
+              <label class="label-info">Sob-costura
+                <span class="material-symbols-outlined" title="Camada de base que melhora estabilidade e acabamento.">info</span>
+              </label>
               <select id="bulkUnderlay" class="inspector-select">
                 <option value="none">Desligada</option>
                 <option value="low">Baixa</option>
@@ -646,23 +696,33 @@
               </select>
             </div>
             <div class="objField">
-              <label>Compensação (mm)</label>
+              <label class="label-info">Compensação (mm)
+                <span class="material-symbols-outlined" title="Compensa encolhimento do tecido no bordado.">info</span>
+              </label>
               <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" class="inspector-input"/>
             </div>
             <div class="objField">
-              <label>Tipo de Contorno</label>
+              <label class="label-info">Tipo de Contorno
+                <span class="material-symbols-outlined" title="Escolhe o estilo de ponto para bordas do desenho.">info</span>
+              </label>
               <select id="bulkOutlineType" class="inspector-select"></select>
             </div>
             <div class="objField">
-              <label>Largura Contorno (mm)</label>
+              <label class="label-info">Largura Contorno (mm)
+                <span class="material-symbols-outlined" title="Espessura visual das bordas em milímetros.">info</span>
+              </label>
               <input id="bulkOutlineWidth" type="number" min="0.5" max="4" step="0.1" value="1.5" class="inspector-input"/>
             </div>
             <div class="objField">
-              <label>Pull Comp (mm)</label>
+              <label class="label-info">Pull Comp (mm)
+                <span class="material-symbols-outlined" title="Compensa tração lateral do tecido durante costura.">info</span>
+              </label>
               <input id="bulkOutlinePull" type="number" min="0" max="0.8" step="0.1" value="0.3" class="inspector-input"/>
             </div>
             <div class="objField">
-              <label>Overlap (mm)</label>
+              <label class="label-info">Overlap (mm)
+                <span class="material-symbols-outlined" title="Sobreposição entre áreas para evitar falhas visuais.">info</span>
+              </label>
               <input id="bulkOutlineOverlap" type="number" min="0" max="1" step="0.1" value="0.4" class="inspector-input"/>
             </div>
           </div>
@@ -711,13 +771,17 @@
       <!-- Tab: Stitch Settings -->
       <div id="inspPanelStitch" class="hidden">
         <div class="space-y-2 mb-4">
-          <label class="block text-[10px] uppercase tracking-widest text-outline">Tipo de Ponto</label>
+          <label class="block text-[10px] uppercase tracking-widest text-outline label-info">Tipo de Ponto
+            <span class="material-symbols-outlined" title="Seleciona o estilo principal de costura do preenchimento.">info</span>
+          </label>
           <select id="inspFillType" class="inspector-select"></select>
         </div>
 
         <div class="space-y-3 mb-4">
           <div class="flex justify-between items-center">
-            <label class="text-[10px] uppercase tracking-widest text-outline">Densidade</label>
+            <label class="text-[10px] uppercase tracking-widest text-outline label-info">Densidade
+              <span class="material-symbols-outlined" title="Ajusta compactação dos pontos para cobertura e textura.">info</span>
+            </label>
             <span id="inspDensityVal" class="text-xs font-mono text-primary">0.40mm</span>
           </div>
           <input id="inspDensityRange" type="range" class="custom-range" min="1" max="10" value="4" oninput="document.getElementById('inspDensityVal').textContent = (this.value * 0.1).toFixed(2) + 'mm'"/>
@@ -725,7 +789,9 @@
 
         <div class="space-y-3 mb-4">
           <div class="flex justify-between items-center">
-            <label class="text-[10px] uppercase tracking-widest text-outline">Compensação de Encolhimento</label>
+            <label class="text-[10px] uppercase tracking-widest text-outline label-info">Compensação de Encolhimento
+              <span class="material-symbols-outlined" title="Corrige deformação do tecido após aplicação dos pontos.">info</span>
+            </label>
             <span id="inspShrinkVal" class="text-xs font-mono text-primary">0.15mm</span>
           </div>
           <input id="inspShrinkRange" type="range" class="custom-range" min="0" max="20" value="3" oninput="document.getElementById('inspShrinkVal').textContent = (this.value * 0.05).toFixed(2) + 'mm'"/>
@@ -755,15 +821,21 @@
       <!-- Tab: Fill Types -->
       <div id="inspPanelFill" class="hidden space-y-4">
         <div>
-          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2">Tipo de Preenchimento</label>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Tipo de Preenchimento
+            <span class="material-symbols-outlined" title="Estilo de trama para preencher áreas internas.">info</span>
+          </label>
           <select id="inspFillType2" class="inspector-select"></select>
         </div>
         <div>
-          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2">Tipo de Contorno</label>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Tipo de Contorno
+            <span class="material-symbols-outlined" title="Define o desenho do ponto aplicado nas bordas.">info</span>
+          </label>
           <select id="inspOutlineType" class="inspector-select"></select>
         </div>
         <div>
-          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2">Largura do Contorno (mm)</label>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Largura do Contorno (mm)
+            <span class="material-symbols-outlined" title="Aumenta ou reduz espessura da borda do desenho.">info</span>
+          </label>
           <input id="inspOutlineWidth" type="number" value="1.5" step="0.1" min="0.5" max="4" class="inspector-input"/>
         </div>
       </div>
