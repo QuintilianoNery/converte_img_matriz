@@ -48,8 +48,34 @@ python -m pip install --upgrade pip
 echo Instalando dependencias...
 pip install -r requirements.txt
 
-echo Iniciando servidor...
-start "" http://127.0.0.1:8000/
-uvicorn app:app --host 127.0.0.1 --port 8000
+set "APP_URL=http://127.0.0.1:8000/"
+
+echo Encerrando instancias antigas do backend...
+powershell -NoProfile -Command "$procs = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match 'uvicorn app:app --host 127.0.0.1 --port 8000' }; foreach($proc in $procs){ try { Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop } catch {} }"
+timeout /t 1 /nobreak >nul
+
+echo Iniciando backend (mesma janela, em background)...
+start "" /b "%CD%\.venv\Scripts\python.exe" -m uvicorn app:app --host 127.0.0.1 --port 8000
+
+echo Aguardando backend ficar pronto...
+set /a BACKEND_TRIES=0
+
+:wait_backend
+set /a BACKEND_TRIES+=1
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%APP_URL%' -TimeoutSec 2; if ($r.StatusCode -ge 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+
+if errorlevel 1 (
+  if !BACKEND_TRIES! GEQ 45 (
+    echo [ERRO] Backend nao respondeu a tempo em %APP_URL%
+    echo Verifique os logs acima para detalhes do backend.
+    pause
+    exit /b 1
+  )
+  timeout /t 1 /nobreak >nul
+  goto :wait_backend
+)
+
+echo Backend pronto. Abrindo frontend...
+start "" "%APP_URL%?v=%RANDOM%"
 
 pause
