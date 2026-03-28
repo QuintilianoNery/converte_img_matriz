@@ -104,6 +104,41 @@ body{
   margin-bottom: 8px;
 }
 
+.palettePanel{
+  margin: 8px 0 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,.02);
+}
+
+.palettePanel h4{
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.paletteEditor{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+}
+
+.paletteItem{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(0,0,0,.18);
+}
+
+.paletteMeta{
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .filterField{
   flex: 1;
 }
@@ -164,6 +199,7 @@ body{
   .objGrid{ grid-template-columns: 1fr; }
   .bulkGrid{ grid-template-columns: 1fr; }
   .editorTopBar{ flex-direction: column; align-items: stretch; }
+  .paletteEditor{ grid-template-columns: 1fr; }
 }
 
 .objMeta{

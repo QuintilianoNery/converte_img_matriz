@@ -98,6 +98,16 @@ QUALITY_PRESETS = {
         "outline": True,
         "outline_step_mult": 0.75,
         "border_width_mm": 1.15,
+        "outline_keepout_mm": 0.0,
+    },
+    "premium_clean": {
+        "density": "high",
+        "underlay": "medium",
+        "shrink_comp_mm": 0.35,
+        "outline": True,
+        "outline_step_mult": 1.35,
+        "border_width_mm": 0.75,
+        "outline_keepout_mm": 0.45,
     },
 }
 
@@ -125,6 +135,8 @@ def _normalize_quality_preset(value: str | None) -> str:
     v = str(value).strip().lower()
     if v in QUALITY_PRESETS:
         return v
+    if v in {"premium clean", "premium-clean", "clean premium"}:
+        return "premium_clean"
     if v == "médio":
         return "medio"
     return "medio"
@@ -348,6 +360,7 @@ def analyze_image_for_autopunch(
                     "density": preset["density"],
                     "shrink_comp_mm": float(preset["shrink_comp_mm"]),
                     "underlay": preset["underlay"],
+                    "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
                 }
             )
 
@@ -358,6 +371,7 @@ def analyze_image_for_autopunch(
             "density": preset["density"],
             "shrink_comp_mm": float(preset["shrink_comp_mm"]),
             "underlay": preset["underlay"],
+            "outline_keepout_mm": float(preset.get("outline_keepout_mm", 0.0)),
             "quality_preset": quality_preset,
             "detail": detail,
         },
@@ -404,9 +418,69 @@ def _erode_n(mask: np.ndarray, iterations: int):
     return out
 
 
+def _dilate_n(mask: np.ndarray, iterations: int):
+    out = mask.copy()
+    for _ in range(max(0, iterations)):
+        out = _dilate_once(out)
+    return out
+
+
 def _boundary_mask(mask: np.ndarray):
     er = _erode_once(mask)
     return mask & (~er)
+
+
+def _point_segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    vx = bx - ax
+    vy = by - ay
+    wx = px - ax
+    wy = py - ay
+    c1 = vx * wx + vy * wy
+    if c1 <= 0:
+        return math.hypot(px - ax, py - ay)
+    c2 = vx * vx + vy * vy
+    if c2 <= 1e-9:
+        return math.hypot(px - ax, py - ay)
+    t = min(1.0, max(0.0, c1 / c2))
+    qx = ax + t * vx
+    qy = ay + t * vy
+    return math.hypot(px - qx, py - qy)
+
+
+def _douglas_peucker(path: list[tuple[int, int]], epsilon: float):
+    if len(path) < 3:
+        return path
+
+    ax, ay = path[0][1], path[0][0]
+    bx, by = path[-1][1], path[-1][0]
+    max_dist = -1.0
+    index = -1
+    for i in range(1, len(path) - 1):
+        px, py = path[i][1], path[i][0]
+        d = _point_segment_distance(px, py, ax, ay, bx, by)
+        if d > max_dist:
+            max_dist = d
+            index = i
+
+    if max_dist <= epsilon or index < 0:
+        return [path[0], path[-1]]
+
+    left = _douglas_peucker(path[: index + 1], epsilon)
+    right = _douglas_peucker(path[index:], epsilon)
+    return left[:-1] + right
+
+
+def _adaptive_density_multiplier(area_px: int) -> float:
+    """Increase step for large objects to reduce points while preserving small details."""
+    if area_px <= 600:
+        return 0.86
+    if area_px <= 1800:
+        return 1.0
+    if area_px <= 5000:
+        return 1.12
+    if area_px <= 12000:
+        return 1.24
+    return 1.36
 
 
 def _neighbors8(pt: tuple[int, int]):
@@ -491,10 +565,13 @@ def _vector_outline_segments(boundary_mask: np.ndarray, mm_per_px: float, step_m
         return []
 
     step_px = max(1, int(round(step_mm / max(mm_per_px, 1e-6))))
+    max_edge_px = max(3.0, step_px * 2.8)
     polylines = _trace_boundary_polylines(boundary_mask, min_len_px=max(8, step_px * 2))
     segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
 
     for path in polylines:
+        epsilon_px = max(0.6, step_px * 0.35)
+        path = _douglas_peucker(path, epsilon=epsilon_px)
         sampled = path[::step_px]
         if sampled[-1] != path[-1]:
             sampled.append(path[-1])
@@ -504,6 +581,8 @@ def _vector_outline_segments(boundary_mask: np.ndarray, mm_per_px: float, step_m
         for i in range(len(sampled) - 1):
             y0, x0 = sampled[i]
             y1, x1 = sampled[i + 1]
+            if math.hypot(x1 - x0, y1 - y0) > max_edge_px:
+                continue
             segments_mm.append(((x0 * mm_per_px, y0 * mm_per_px), (x1 * mm_per_px, y1 * mm_per_px)))
 
         # Close loops when ends are near each other.
@@ -742,6 +821,7 @@ def convert_image_to_embroidery(
     global_outline = bool(cfg_global.get("outline", preset["outline"]))
     global_outline_mult = float(cfg_global.get("outline_step_mult", preset["outline_step_mult"]))
     global_border_width_mm = float(cfg_global.get("border_width_mm", preset["border_width_mm"]))
+    global_outline_keepout_mm = float(cfg_global.get("outline_keepout_mm", preset.get("outline_keepout_mm", 0.0)))
 
     objects = []
     for obj in default_objects:
@@ -793,7 +873,9 @@ def convert_image_to_embroidery(
 
         density = str(obj.get("density", global_density)).lower()
         density_factor = DENSITY_FACTORS.get(density, DENSITY_FACTORS["medium"])
-        step_obj_mm = step_mm * density_factor
+        area_px = int(obj.get("area_px", 0))
+        adaptive_factor = _adaptive_density_multiplier(area_px)
+        step_obj_mm = step_mm * density_factor * adaptive_factor
 
         shrink_comp_mm = float(obj.get("shrink_comp_mm", global_shrink))
         mask = _apply_shrink_comp(mask, mm_per_px=mm_per_px, shrink_comp_mm=shrink_comp_mm)
@@ -841,8 +923,17 @@ def convert_image_to_embroidery(
             segments = underlay_segments + segments
 
         if bool(obj.get("outline", global_outline)):
+            outline_src = outline_mask
+            keepout_mm = float(obj.get("outline_keepout_mm", global_outline_keepout_mm))
+            if keepout_mm > 0:
+                keepout_px = max(1, int(round(keepout_mm / max(mm_per_px, 1e-6))))
+                keepout_zone = _dilate_n(border_mask, keepout_px)
+                reduced = outline_mask & (~keepout_zone)
+                if reduced.any():
+                    outline_src = reduced
+
             outline_segments = _vector_outline_segments(
-                outline_mask,
+                outline_src,
                 mm_per_px=mm_per_px,
                 step_mm=max(step_obj_mm * global_outline_mult, 0.18),
             )
@@ -902,5 +993,6 @@ def convert_image_to_embroidery(
     meta["total_stitches_approx"] = total_stitches
     meta["step_mm"] = step_mm
     meta["quality_preset"] = preset_name
+    meta["adaptive_density"] = True
 
     return preview_path, out_path, meta

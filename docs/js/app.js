@@ -32,8 +32,10 @@ const btnCollapseAll = el("btnCollapseAll");
 const btnApplyBulk = el("btnApplyBulk");
 const editorCard = el("editorCard");
 const objectsEditor = el("objectsEditor");
+const paletteEditor = el("paletteEditor");
 const objectFilter = el("objectFilter");
 const objectsCount = el("objectsCount");
+const colorsSelect = el("colors");
 const bulkFillType = el("bulkFillType");
 const bulkDensity = el("bulkDensity");
 const bulkUnderlay = el("bulkUnderlay");
@@ -44,6 +46,26 @@ const qualityAlert = el("qualityAlert");
 apiBaseInput.value = DEFAULT_API_BASE_URL;
 
 let autoPunchModel = null;
+let autoPreviewTimer = null;
+let autoPreviewRunning = false;
+let autoPreviewPending = false;
+
+function initColorSelector() {
+  if (!colorsSelect) return;
+  const current = Number(colorsSelect.value || 16);
+  colorsSelect.innerHTML = "";
+  for (let n = 1; n <= 24; n += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = String(n);
+    if (n === current || (current < 1 && n === 16)) {
+      opt.selected = true;
+    }
+    colorsSelect.appendChild(opt);
+  }
+}
+
+initColorSelector();
 
 if (bulkFillType) {
   bulkFillType.innerHTML = FILL_OPTIONS.map(([value, label]) => (`
@@ -90,11 +112,12 @@ function renderObjectsEditor() {
   if (!autoPunchModel?.analysis?.objects?.length) {
     editorCard.hidden = true;
     objectsEditor.innerHTML = "";
+    if (paletteEditor) paletteEditor.innerHTML = "";
     return;
   }
 
   const html = autoPunchModel.analysis.objects.map((obj, i) => `
-    <details class="objItem" data-id="${esc(obj.id)}" ${i < 4 ? "open" : ""}>
+    <details class="objItem" data-id="${esc(obj.id)}" data-label-index="${Number(obj.label_index)}" ${i < 4 ? "open" : ""}>
       <summary class="objHead">
         <span class="objHeadLeft">
           <span class="swatch" style="background:${esc(obj.color)}"></span>
@@ -146,7 +169,59 @@ function renderObjectsEditor() {
 
   objectsEditor.innerHTML = html;
   editorCard.hidden = false;
+  renderPaletteEditor();
   applyObjectFilter();
+}
+
+function renderPaletteEditor() {
+  if (!paletteEditor) return;
+  const objects = autoPunchModel?.analysis?.objects || [];
+  if (!objects.length) {
+    paletteEditor.innerHTML = "";
+    return;
+  }
+
+  const grouped = new Map();
+  objects.forEach((obj) => {
+    const idx = Number(obj.label_index);
+    if (!grouped.has(idx)) {
+      grouped.set(idx, {
+        labelIndex: idx,
+        color: obj.color,
+        count: 0,
+      });
+    }
+    grouped.get(idx).count += 1;
+  });
+
+  const rows = [...grouped.values()]
+    .sort((a, b) => a.labelIndex - b.labelIndex)
+    .map((row) => `
+      <label class="paletteItem">
+        <span class="paletteMeta">Cor ${row.labelIndex + 1} (${row.count} objeto(s))</span>
+        <input type="color" value="${esc(row.color)}" data-palette-label="${row.labelIndex}" />
+      </label>
+    `)
+    .join("");
+
+  paletteEditor.innerHTML = rows;
+}
+
+function applyPaletteColorToLabel(labelIndex, colorHex) {
+  const objects = autoPunchModel?.analysis?.objects || [];
+  objects.forEach((obj) => {
+    if (Number(obj.label_index) === Number(labelIndex)) {
+      obj.color = colorHex;
+    }
+  });
+
+  const cards = objectsEditor.querySelectorAll(`details.objItem[data-label-index="${Number(labelIndex)}"]`);
+  cards.forEach((card) => {
+    const sw = card.querySelector(".swatch");
+    if (sw) sw.style.background = colorHex;
+    const input = card.querySelector("input[data-prop='color']");
+    if (input) input.value = colorHex;
+  });
 }
 
 function applyObjectFilter() {
@@ -211,9 +286,97 @@ function getDesignConfig() {
       shrink_comp_mm: Number(defaults.shrink_comp_mm ?? 0.4),
       underlay: defaults.underlay || "medium",
       outline: true,
+      outline_keepout_mm: Number(defaults.outline_keepout_mm ?? 0),
     },
     objects: autoPunchModel.analysis.objects,
   };
+}
+
+function buildConvertFormData() {
+  const imageFile = el("image").files?.[0];
+  if (!imageFile) return null;
+
+  const fd = new FormData();
+  fd.append("image", imageFile);
+  fd.append("size_cm", el("sizeCm").value);
+  fd.append("format", el("format").value);
+  fd.append("colors", el("colors").value);
+  fd.append("detail", el("detail").value);
+  fd.append("quality_preset", el("qualityPreset").value);
+
+  const designConfig = getDesignConfig();
+  if (designConfig) {
+    fd.append("design_config", JSON.stringify(designConfig));
+  }
+  return fd;
+}
+
+async function runConvert({ silent = false } = {}) {
+  const imageFile = el("image").files?.[0];
+  if (!imageFile) return;
+
+  const apiBase = (apiBaseInput.value || "").trim().replace(/\/+$/, "");
+  if (!apiBase) {
+    if (!silent) setStatus("Informe a URL do backend (API).", "error");
+    return;
+  }
+
+  const fd = buildConvertFormData();
+  if (!fd) return;
+
+  if (!silent) {
+    setStatus("Convertendo... isso pode levar alguns segundos.", "info");
+    resultCard.hidden = true;
+  }
+  btnReset.disabled = true;
+
+  const res = await fetch(`${apiBase}/convert`, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Erro HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  previewImg.src = `${apiBase}${data.preview_url}?t=${Date.now()}`;
+  downloadBtn.href = `${apiBase}${data.download_url}`;
+  metaEl.textContent = JSON.stringify(data.meta, null, 2);
+  resultCard.hidden = false;
+  btnReset.disabled = false;
+
+  if (!silent) {
+    setStatus("Conversao concluida.", "ok");
+  }
+}
+
+function scheduleAutoPreviewUpdate() {
+  if (autoPreviewTimer) {
+    clearTimeout(autoPreviewTimer);
+  }
+
+  autoPreviewTimer = setTimeout(async () => {
+    if (autoPreviewRunning) {
+      autoPreviewPending = true;
+      return;
+    }
+
+    autoPreviewRunning = true;
+    try {
+      await runConvert({ silent: true });
+      setStatus("Alteracao salva automaticamente e preview atualizado.", "ok");
+    } catch (err) {
+      setStatus(`Falha ao atualizar preview automaticamente:\n${err.message}`, "error");
+    } finally {
+      autoPreviewRunning = false;
+      if (autoPreviewPending) {
+        autoPreviewPending = false;
+        scheduleAutoPreviewUpdate();
+      }
+    }
+  }, 850);
 }
 
 btnReset.addEventListener("click", () => {
@@ -246,6 +409,58 @@ btnApplyBulk?.addEventListener("click", () => {
 
 objectFilter?.addEventListener("input", () => {
   applyObjectFilter();
+});
+
+paletteEditor?.addEventListener("input", (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const label = target.getAttribute("data-palette-label");
+  if (label === null) return;
+  applyPaletteColorToLabel(Number(label), target.value);
+  scheduleAutoPreviewUpdate();
+});
+
+objectsEditor?.addEventListener("input", (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+  const prop = target.getAttribute("data-prop");
+  if (!prop) return;
+
+  readEditorIntoModel();
+
+  if (prop === "color") {
+    const card = target.closest("details.objItem");
+    if (card) {
+      const sw = card.querySelector(".swatch");
+      if (sw && target instanceof HTMLInputElement) {
+        sw.style.background = target.value;
+      }
+    }
+    renderPaletteEditor();
+    scheduleAutoPreviewUpdate();
+  }
+});
+
+objectsEditor?.addEventListener("change", (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+  const prop = target.getAttribute("data-prop");
+  if (!prop) return;
+
+  readEditorIntoModel();
+  if (prop === "color") {
+    renderPaletteEditor();
+    scheduleAutoPreviewUpdate();
+  }
+});
+
+paletteEditor?.addEventListener("change", (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const label = target.getAttribute("data-palette-label");
+  if (label === null) return;
+  applyPaletteColorToLabel(Number(label), target.value);
+  scheduleAutoPreviewUpdate();
 });
 
 el("image").addEventListener("change", async (e) => {
@@ -300,52 +515,8 @@ btnAutoPunch?.addEventListener("click", async () => {
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
-
-  const imageFile = el("image").files?.[0];
-  if (!imageFile) return;
-
-  const apiBase = (apiBaseInput.value || "").trim().replace(/\/+$/, "");
-  if (!apiBase) {
-    setStatus("Informe a URL do backend (API).", "error");
-    return;
-  }
-
-  const fd = new FormData();
-  fd.append("image", imageFile);
-  fd.append("size_cm", el("sizeCm").value);
-  fd.append("format", el("format").value);
-  fd.append("colors", el("colors").value);
-  fd.append("detail", el("detail").value);
-  fd.append("quality_preset", el("qualityPreset").value);
-
-  const designConfig = getDesignConfig();
-  if (designConfig) {
-    fd.append("design_config", JSON.stringify(designConfig));
-  }
-
-  setStatus("Convertendo... isso pode levar alguns segundos.", "info");
-  resultCard.hidden = true;
-  btnReset.disabled = true;
-
   try {
-    const res = await fetch(`${apiBase}/convert`, {
-      method: "POST",
-      body: fd,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || `Erro HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    previewImg.src = `${apiBase}${data.preview_url}?t=${Date.now()}`;
-    downloadBtn.href = `${apiBase}${data.download_url}`;
-    metaEl.textContent = JSON.stringify(data.meta, null, 2);
-
-    resultCard.hidden = false;
-    btnReset.disabled = false;
-    setStatus("Conversao concluida.", "ok");
+    await runConvert({ silent: false });
   } catch (err) {
     setStatus(`Falha na conversao:\n${err.message}`, "error");
   }

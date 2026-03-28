@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from converter import convert_image_to_embroidery, analyze_image_for_autopunch
@@ -34,6 +34,18 @@ app.add_middleware(
 DOCS_DIR = BASE_DIR.parent / "docs"
 if DOCS_DIR.exists():
     app.mount("/docs", StaticFiles(directory=str(DOCS_DIR), html=True), name="docs")
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    # Evita log de 404 quando o navegador solicita o favicon automaticamente.
+    candidates = [
+        DOCS_DIR / "favicon.ico",
+        BASE_DIR.parent / "favicon.ico",
+    ]
+    for icon_path in candidates:
+        if icon_path.exists():
+            return FileResponse(str(icon_path), media_type="image/x-icon")
+    return Response(status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
 def root():
