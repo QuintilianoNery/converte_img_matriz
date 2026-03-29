@@ -822,6 +822,13 @@ function renderObjectsEditor() {
             <input type="color" data-prop="color" value="${esc(obj.color)}" class="objField"/>
           </div>
           <div class="objField">
+            <label>Fill Ativo</label>
+            <select data-prop="fill_enabled" class="inspector-select">
+              <option value="true" ${obj.fill_enabled !== false ? "selected" : ""}>Sim</option>
+              <option value="false" ${obj.fill_enabled === false ? "selected" : ""}>Não (só contorno)</option>
+            </select>
+          </div>
+          <div class="objField">
             <label>Preenchimento</label>
             <select data-prop="fill_type" class="inspector-select">${fillOptionsHtml(obj.fill_type || "tatami")}</select>
           </div>
@@ -985,6 +992,7 @@ function readEditorIntoModel() {
       const prop = input.getAttribute("data-prop");
       const value = input.value;
       if (prop === "enabled") obj.enabled = value === "true";
+      else if (prop === "fill_enabled") obj.fill_enabled = value === "true";
       else if (prop === "shrink_comp_mm") obj.shrink_comp_mm = Number(value || 0);
       else obj[prop] = value;
     });

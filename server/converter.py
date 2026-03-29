@@ -11,6 +11,11 @@ from typing import Any, Literal
 import numpy as np
 from PIL import Image, ImageColor, ImageFilter
 
+try:
+    import cv2
+except ImportError:
+    cv2 = None
+
 from pyembroidery import (
     EmbPattern,
     EmbThread,
@@ -947,6 +952,17 @@ def _vectorize_and_group_rgba(
     fill_rgb = np.median(rgb_arr[opaque_mask], axis=0).astype(np.uint8)
     rgb_arr[~opaque_mask] = fill_rgb
 
+    # Melhoria 1: Aplicar bilateral filter (preserva bordas) + median blur para suavização
+    if cv2 is not None:
+        try:
+            # Bilateral filter: suaviza preservando bordas reais
+            rgb_arr = cv2.bilateralFilter(rgb_arr, 9, 75, 75)
+            # Median blur: elimina ruído de cor pontual
+            rgb_arr = cv2.medianBlur(rgb_arr, 3)
+        except Exception:
+            # Fallback se cv2 falhar
+            pass
+
     base = Image.fromarray(rgb_arr, mode="RGB")
 
     # Suavização para reduzir serrilhado e ruído antes da paleta.
@@ -1041,6 +1057,19 @@ def _clean_color_component_mask(mask: np.ndarray, min_area_px: int = 28):
     smooth = _erode_once(_dilate_once(mask))
     # Remove one-pixel spikes introduced by color quantization.
     smooth = _dilate_once(_erode_once(smooth))
+
+    # Melhoria 4: Aplicar dilate + erode morfológico (open/close) para arredondar bordas
+    if cv2 is not None:
+        try:
+            mask_uint8 = smooth.astype(np.uint8) * 255
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            # Dilate para expandir bordas
+            dilated = cv2.dilate(mask_uint8, kernel, iterations=1)
+            # Erode para suavizar (closing)
+            smooth_cv = cv2.erode(dilated, kernel, iterations=1)
+            smooth = smooth_cv.astype(bool)
+        except Exception:
+            pass
 
     if min_area_px <= 1:
         return smooth
@@ -1644,6 +1673,20 @@ def _adaptive_density_multiplier(area_px: int) -> float:
     return 1.36
 
 
+def _touches_image_border(bbox: list[int] | tuple[int, int, int, int], width: int, height: int, margin: int = 1) -> bool:
+    minx, miny, maxx, maxy = [int(v) for v in bbox]
+    return (minx <= margin) or (miny <= margin) or (maxx >= (width - 1 - margin)) or (maxy >= (height - 1 - margin))
+
+
+def _is_extreme_neutral_rgb(rgb: tuple[int, int, int]) -> bool:
+    r, g, b = [int(v) for v in rgb]
+    cmax = max(r, g, b)
+    cmin = min(r, g, b)
+    saturation = cmax - cmin
+    luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b)
+    return saturation <= 28 and (luminance <= 26.0 or luminance >= 244.0)
+
+
 def _neighbors8(pt: tuple[int, int]):
     y, x = pt
     return (
@@ -1656,6 +1699,39 @@ def _neighbors8(pt: tuple[int, int]):
         (y + 1, x),
         (y + 1, x + 1),
     )
+
+
+def _trace_boundary_polylines_cv2(boundary_mask: np.ndarray, min_len_px: int = 8):
+    """
+    Melhoria 3: Use cv2.findContours com CHAIN_APPROX_TC89_KCOS para contornos mais suavizados.
+    Aplica approxPolyDP para suavizar o traçado imitando movimento real da máquina.
+    """
+    if cv2 is None:
+        # Fallback para abordagem original
+        return _trace_boundary_polylines(boundary_mask, min_len_px)
+    
+    try:
+        # Converter máscara para uint8
+        mask_uint8 = (boundary_mask.astype(np.uint8) * 255)
+        
+        # Usar CHAIN_APPROX_TC89_KCOS para maior precisão de contornos
+        contours, _ = cv2.findContours(mask_uint8, cv2.RETR_TREE, cv2.CHAIN_APPROX_TC89_KCOS)
+        
+        polylines = []
+        for contour in contours:
+            # Aplicar approxPolyDP para suavizar
+            epsilon = 2.5
+            contour_approx = cv2.approxPolyDP(contour, epsilon, closed=True)
+            
+            # Converter para lista de tuplas (y, x) formato esperado
+            if len(contour_approx) >= min_len_px:
+                points = [(int(pt[0][1]), int(pt[0][0])) for pt in contour_approx]
+                polylines.append(points)
+        
+        return polylines
+    except Exception:
+        # Fallback para abordagem original se cv2 falhar
+        return _trace_boundary_polylines(boundary_mask, min_len_px)
 
 
 def _trace_boundary_polylines(boundary_mask: np.ndarray, min_len_px: int = 8):
@@ -1727,7 +1803,8 @@ def _vector_outline_polylines(boundary_mask: np.ndarray, mm_per_px: float, step_
 
     step_px = max(1, int(round(step_mm / max(mm_per_px, 1e-6))))
     max_edge_px = max(3.0, step_px * 2.8)
-    polylines = _trace_boundary_polylines(boundary_mask, min_len_px=max(8, step_px * 2))
+    # Melhoria 3: Use cv2.findContours with CHAIN_APPROX_TC89_KCOS
+    polylines = _trace_boundary_polylines_cv2(boundary_mask, min_len_px=max(8, step_px * 2))
     polylines_mm: list[list[tuple[float, float]]] = []
 
     for path in polylines:
@@ -1936,7 +2013,8 @@ def _scanline_fill_segments(
     segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
     row_idx = 0
     curr = min_ry
-    band_half = max(0.55, row_gap_px * 0.42)
+    # Melhoria 2: band_half deve ser row_gap_px / 2 (não 0.42) para sem gaps entre bandas
+    band_half = max(0.55, row_gap_px * 0.5)
 
     while curr <= max_ry:
         in_band = np.abs(ry - curr) <= band_half
@@ -1951,7 +2029,11 @@ def _scanline_fill_segments(
             runs: list[tuple[np.ndarray, np.ndarray]] = []
             start = 0
             for i in range(1, bx.size):
-                if math.hypot(float(bx[i] - bx[i - 1]), float(by[i] - by[i - 1])) > gap_break_px:
+                gap_xy = math.hypot(float(bx[i] - bx[i - 1]), float(by[i] - by[i - 1]))
+                gap_rot = float(brx[order][i] - brx[order][i - 1])
+                # Quebra corrida se houver salto grande no eixo da varredura
+                # ou no espaço original da imagem.
+                if gap_rot > gap_break_px or gap_xy > gap_break_px:
                     runs.append((bx[start:i], by[start:i]))
                     start = i
             runs.append((bx[start:], by[start:]))
@@ -1975,6 +2057,8 @@ def _scanline_fill_segments(
                 for i in range(len(sampled) - 1):
                     ax, ay = sampled[i]
                     bx2, by2 = sampled[i + 1]
+                    if math.hypot(bx2 - ax, by2 - ay) > (stitch_px * 1.9):
+                        continue
                     segments_mm.append(((ax * mm_per_px, ay * mm_per_px), (bx2 * mm_per_px, by2 * mm_per_px)))
 
         curr += row_gap_px
@@ -1997,13 +2081,16 @@ def _make_segments_for_mask(
     segments_mm: list[tuple[tuple[float, float], tuple[float, float]]] = []
 
     # Suavização morfológica simples para reduzir ruído de 1 px.
+    # Importante: não usar np.roll aqui, pois ele faz wrap nas bordas e cria
+    # conexões falsas entre lados opostos da imagem (artefatos em cantos).
     m = mask.astype(np.uint8)
+    p = np.pad(m, ((1, 1), (1, 1)), mode="constant", constant_values=0)
     nb = (
-        m
-        + np.roll(m, 1, axis=0)
-        + np.roll(m, -1, axis=0)
-        + np.roll(m, 1, axis=1)
-        + np.roll(m, -1, axis=1)
+        p[1:-1, 1:-1]
+        + p[:-2, 1:-1]
+        + p[2:, 1:-1]
+        + p[1:-1, :-2]
+        + p[1:-1, 2:]
     )
     mask = nb >= 3
 
@@ -2011,18 +2098,22 @@ def _make_segments_for_mask(
     slant_px = max(1, step_px // 2)
 
     if fill_type in {"tatami", "satin", "prog_fill", "zigzag"}:
-        row_gap_mm = max(0.95, min(3.0, step_mm * 4.2))
-        stitch_len_mm = max(1.4, min(2.7, row_gap_mm * 1.12))
+        # Pitch padrão de bordado profissional: 0.35–0.55 mm entre linhas para cobertura densa.
+        # Linhas muito espaçadas (>1 mm) geram faixas visíveis tanto na prévia quanto no tecido.
+        row_gap_mm = max(0.35, min(0.55, step_mm * 1.4))
+        # Ponto tatami clássico: comprimento 2–4 mm, levemente maior que o espaçamento entre linhas.
+        stitch_len_mm = max(2.0, min(3.8, step_mm * 9.0))
 
         if fill_type == "satin":
-            row_gap_mm = max(0.65, min(1.8, step_mm * 2.6))
-            stitch_len_mm = max(1.0, min(2.1, row_gap_mm * 1.15))
+            # Satin: linhas mais próximas para cobertura total (simula ponto cheio).
+            row_gap_mm = max(0.28, min(0.45, step_mm * 1.1))
+            stitch_len_mm = max(1.5, min(3.0, step_mm * 7.0))
         elif fill_type == "prog_fill":
-            row_gap_mm = max(0.8, min(2.4, step_mm * 3.4))
-            stitch_len_mm = max(1.3, min(2.6, row_gap_mm * 1.1))
+            row_gap_mm = max(0.32, min(0.50, step_mm * 1.3))
+            stitch_len_mm = max(1.8, min(3.5, step_mm * 8.5))
         elif fill_type == "zigzag":
-            row_gap_mm = max(0.9, min(2.6, step_mm * 3.6))
-            stitch_len_mm = max(1.3, min(2.6, row_gap_mm * 1.08))
+            row_gap_mm = max(0.38, min(0.58, step_mm * 1.5))
+            stitch_len_mm = max(1.8, min(3.5, step_mm * 8.5))
 
         main = _scanline_fill_segments(
             mask,
@@ -2208,21 +2299,36 @@ def convert_image_to_embroidery(
     for ci in order.tolist():
         if ci < 0 or counts[ci] == 0:
             continue
-        color_mask = _clean_color_component_mask(label_img == int(ci), min_area_px=24)
+        # Melhoria 7: usar min_area_px=8 para não eliminar regiões legítimas pequenas (olhos, nariz, coração)
+        color_mask = _clean_color_component_mask(label_img == int(ci), min_area_px=8)
         comps, comp_map = _find_components(color_mask)
         r, g, b = map(int, centers_u8[ci])
+        color_rgb = (r, g, b)
+        is_neutral_extreme = _is_extreme_neutral_rgb(color_rgb)
         for comp in comps:
             oid = f"c{ci}_o{comp['id']}"
+            area_px = int(comp.get("area_px", 0))
+            bbox = comp["bbox"]
+            touches_border = _touches_image_border(bbox, width_px, height_px, margin=1)
+            area_ratio = area_px / float(max(1, width_px * height_px))
+            likely_background = touches_border and is_neutral_extreme and (area_ratio >= 0.02)
+            
+            # Melhoria 7: Lógica de tamanho
+            # Regiões < 8px: eliminadas (não adicionado)
+            # Regiões 8-30px: apenas outline (sem fill)
+            # Regiões > 30px: fill + outline (padrão)
+            fill_enabled = area_px > 30
+            
             default_objects.append(
                 {
                     "id": oid,
                     "label_index": int(ci),
                     "component_index": int(comp["id"]),
-                    "bbox": comp["bbox"],
-                    "area_px": comp["area_px"],
-                    "enabled": True,
+                    "bbox": bbox,
+                    "area_px": area_px,
+                    "enabled": not likely_background,
                     "color": f"#{r:02x}{g:02x}{b:02x}",
-                    "fill_enabled": True,
+                    "fill_enabled": (fill_enabled and (not likely_background)),  # Determinado pelo tamanho
                     "fill_type": "tatami",
                     "density": "medium",
                     "shrink_comp_mm": 0.4,
@@ -2388,6 +2494,7 @@ def convert_image_to_embroidery(
                 overlap_px = max(1, int(round(outline_overlap_mm / max(mm_per_px, 1e-6))))
                 outline_src = _dilate_n(outline_src, overlap_px)
 
+            # Melhoria 5: outline gerado UMA VEZ - adicionado após fill (TRIM → outline, mesmo thread)
             outline_segments = _vector_outline_segments(
                 outline_src,
                 mm_per_px=mm_per_px,
@@ -2396,7 +2503,9 @@ def convert_image_to_embroidery(
                 width_mm=float(obj.get("outline_width_mm", global_outline_width_mm)),
                 pull_comp_mm=float(obj.get("outline_pull_comp_mm", global_outline_pull_comp_mm)),
             )
-            segments = segments + outline_segments
+        else:
+            outline_segments = []
+        
         if not segments:
             continue
 
@@ -2425,7 +2534,7 @@ def convert_image_to_embroidery(
                         cursor_x, cursor_y = jx, jy
                     # TRIM em saltos longos reduz linhas de arraste visíveis no tecido.
                     if has_stitched_any and trim_long_jump_mm > 0 and travel >= trim_long_jump_mm:
-                        pattern.add_command(TRIM)
+                        pattern.add_stitch_relative(TRIM, 0, 0)
             cursor_x, cursor_y = x0, y0
 
             # Dividir segmentos longos em vários pontos melhora o preenchimento
@@ -2440,7 +2549,41 @@ def convert_image_to_embroidery(
                 total_stitches += 1
                 has_stitched_any = True
 
-        # total_stitches contabiliza apenas comandos STITCH.
+        # Melhoria 5: Depois dos fill stitches, TRIM e outline NO MESMO thread (sem COLOR_CHANGE extra).
+        # COLOR_CHANGE extra quebraria a threadlist já construída, embaralhando cores.
+        if outline_segments:
+            # TRIM para separar visualmente fill de outline (a máquina corta o fio, sem rastro).
+            if has_stitched_any:
+                pattern.add_stitch_relative(TRIM, 0, 0)
+
+            for (x0, y0), (x1, y1) in outline_segments:
+                travel = math.hypot(x0 - cursor_x, y0 - cursor_y)
+                if travel > 1e-9:
+                    should_connect_with_stitch = (not jump_between_segments_only) and (travel <= connect_travel_mm)
+                    if should_connect_with_stitch:
+                        pattern.add_stitch_relative(STITCH, x0 - cursor_x, y0 - cursor_y)
+                        total_stitches += 1
+                        has_stitched_any = True
+                    else:
+                        jump_steps = max(1, int(np.ceil(travel / max_jump_mm)))
+                        for ji in range(1, jump_steps + 1):
+                            jx = cursor_x + (x0 - cursor_x) * (ji / jump_steps)
+                            jy = cursor_y + (y0 - cursor_y) * (ji / jump_steps)
+                            pattern.add_stitch_relative(JUMP, jx - cursor_x, jy - cursor_y)
+                            cursor_x, cursor_y = jx, jy
+                        if has_stitched_any and trim_long_jump_mm > 0 and travel >= trim_long_jump_mm:
+                            pattern.add_stitch_relative(TRIM, 0, 0)
+                cursor_x, cursor_y = x0, y0
+
+                span = max(abs(x1 - x0), abs(y1 - y0))
+                steps = max(1, int(np.ceil(span / max_stitch_mm)))
+                for si in range(1, steps + 1):
+                    tx = x0 + (x1 - x0) * (si / steps)
+                    ty = y0 + (y1 - y0) * (si / steps)
+                    pattern.add_stitch_relative(STITCH, tx - cursor_x, ty - cursor_y)
+                    cursor_x, cursor_y = tx, ty
+                    total_stitches += 1
+                    has_stitched_any = True
 
     pattern.add_command(END)
 
