@@ -33,6 +33,46 @@ const OUTLINE_OPTIONS = [
   ["cover", "Cover stitch"],
 ];
 
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "webp", "bmp", "gif", "tif", "tiff", "svg", "ai", "cdr",
+]);
+
+function fileExtension(name) {
+  const n = String(name || "");
+  const idx = n.lastIndexOf(".");
+  if (idx < 0) return "";
+  return n.slice(idx + 1).trim().toLowerCase();
+}
+
+function isSupportedUploadFile(file) {
+  if (!file) return false;
+  const ext = fileExtension(file.name);
+  if (ext && SUPPORTED_UPLOAD_EXTENSIONS.has(ext)) return true;
+  return !!(file.type && file.type.startsWith("image/"));
+}
+
+function isBrowserPreviewableUpload(file) {
+  if (!file) return false;
+  const ext = fileExtension(file.name);
+  if (ext === "cdr" || ext === "ai") return false;
+  if (ext === "svg") return true;
+  return !!(file.type && file.type.startsWith("image/"));
+}
+
+function uploadTypeLabel(file) {
+  const ext = fileExtension(file?.name || "");
+  if (ext) return ext.toUpperCase();
+  if (file?.type) return String(file.type);
+  return "arquivo";
+}
+
+function isRasterUploadPreviewType(file) {
+  const ext = fileExtension(file?.name || "");
+  if (ext === "png" || ext === "jpg" || ext === "jpeg") return true;
+  const mime = String(file?.type || "").toLowerCase();
+  return mime === "image/png" || mime === "image/jpeg";
+}
+
 // ── Element References ──────────────────────────────────────
 const el = (id) => document.getElementById(id);
 
@@ -75,6 +115,7 @@ const btnCancelApiSettings = el("btnCancelApiSettings");
 const btnSaveApiSettings = el("btnSaveApiSettings");
 const autoPreviewEnabledInput = el("autoPreviewEnabled");
 const autoQualityEnabledInput = el("autoQualityEnabled");
+const fabricProfileInput = el("fabricProfile");
 const qualityAlert  = el("qualityAlert");
 const barPoints     = el("barPoints");
 const barLine       = el("barLine");
@@ -100,6 +141,7 @@ const editorToolbox  = el("editorToolbox");
 const editorInspector = el("editorInspector");
 const navPainel      = el("navPainel");
 const navEditor      = el("navEditor");
+const canvasInner    = el("canvasInner");
 const editorPreview  = el("editorPreview");
 const canvasPlaceholder = el("canvasPlaceholder");
 const inspObjectTree = el("inspObjectTree");
@@ -200,6 +242,7 @@ function loadSavedApiBase() {
   const settings = loadUiSettings();
   if (autoPreviewEnabledInput) autoPreviewEnabledInput.checked = !!settings.autoPreviewEnabled;
   if (autoQualityEnabledInput) autoQualityEnabledInput.checked = !!settings.autoQualityEnabled;
+  if (fabricProfileInput) fabricProfileInput.value = String(settings.fabricProfile || "brim");
 }
 
 function saveApiBase() {
@@ -217,6 +260,9 @@ function saveApiBase() {
   if (autoQualityEnabledInput) {
     saveUiSettings({ autoQualityEnabled: !!autoQualityEnabledInput.checked });
   }
+  if (fabricProfileInput) {
+    saveUiSettings({ fabricProfile: String(fabricProfileInput.value || "brim") });
+  }
   closeApiSettings();
   setStatus(`API configurada para ${normalized}`, "ok");
   return true;
@@ -224,6 +270,8 @@ function saveApiBase() {
 
 function openApiSettings() {
   if (!apiSettingsBackdrop) return;
+  // Sempre reidrata formulário com valores persistidos ao abrir.
+  loadSavedApiBase();
   apiSettingsBackdrop.hidden = false;
   apiBaseInput.focus();
   apiBaseInput.select();
@@ -233,8 +281,6 @@ function closeApiSettings() {
   if (!apiSettingsBackdrop) return;
   apiSettingsBackdrop.hidden = true;
 }
-
-loadSavedApiBase();
 
 // ── State ───────────────────────────────────────────────────
 let autoPunchModel = null;
@@ -247,6 +293,7 @@ let stageProgressTimer = null;
 let sourceImagePreviewUrl = "";
 let sourceImageEl = new Image();
 let autoUnderlayEnabled = true;
+let smartAutoQualityFirstRunDone = false;
 const underlayBackupByObjectId = new Map();
 
 const RECENT_PROJECTS_KEY = "converter.recentProjects";
@@ -258,6 +305,7 @@ const DEFAULT_UI_SETTINGS = {
   previewZoomPct: 100,
   autoPreviewEnabled: true,
   autoQualityEnabled: true,
+  fabricProfile: "brim",
   hoopSizePx: 460,
   propsPanelCollapsed: false,
 };
@@ -563,11 +611,11 @@ function applyHoopSize(px) {
 }
 
 function isAutoPreviewEnabled() {
-  return autoPreviewEnabledInput ? !!autoPreviewEnabledInput.checked : !!loadUiSettings().autoPreviewEnabled;
+  return !!loadUiSettings().autoPreviewEnabled;
 }
 
 function isAutoQualityEnabled() {
-  return autoQualityEnabledInput ? !!autoQualityEnabledInput.checked : !!loadUiSettings().autoQualityEnabled;
+  return !!loadUiSettings().autoQualityEnabled;
 }
 
 function applyMarketQualityDefaults() {
@@ -714,9 +762,16 @@ function showObjectPreviewPopup(objectId, ev) {
 function checkQuality(file) {
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve({ width: img.width, height: img.height, minSide: Math.min(img.width, img.height) });
-    img.onerror = () => resolve(null);
-    img.src = URL.createObjectURL(file);
+    const blobUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(blobUrl);
+      resolve({ width: img.width, height: img.height, minSide: Math.min(img.width, img.height) });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(blobUrl);
+      resolve(null);
+    };
+    img.src = blobUrl;
   });
 }
 
@@ -1035,8 +1090,6 @@ async function runConvert({ silent = false } = {}) {
     return;
   }
 
-  applyMarketQualityDefaults();
-
   const fd = buildConvertFormData();
   if (!fd) return;
 
@@ -1137,7 +1190,10 @@ function setupUploadZone() {
     e.preventDefault();
     zone.classList.remove("drag-over");
     const file = e.dataTransfer?.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!isSupportedUploadFile(file)) {
+      setStatus("Formato não suportado. Use PNG/JPG/SVG/AI/CDR.", "error");
+      return;
+    }
     // Transfer to file input
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -1148,12 +1204,20 @@ function setupUploadZone() {
 
 async function handleFileSelected(file) {
   if (!file) return;
+  if (!isSupportedUploadFile(file)) {
+    setStatus("Formato não suportado. Use PNG/JPG/SVG/AI/CDR.", "error");
+    return;
+  }
+
+  const previewableInBrowser = isBrowserPreviewableUpload(file);
+
   qualityAlert.classList.add("hidden");
-  const q = await checkQuality(file);
+  const q = previewableInBrowser ? await checkQuality(file) : null;
   if (q && q.minSide < 1200) qualityAlert.classList.remove("hidden");
 
   // New source image invalidates previous autopunch metrics/config.
   autoPunchModel = null;
+  smartAutoQualityFirstRunDone = false;
   underlayBackupByObjectId.clear();
   setAutoUnderlayToggleUI(true);
   objectsEditor.innerHTML = "";
@@ -1166,26 +1230,62 @@ async function handleFileSelected(file) {
     URL.revokeObjectURL(sourceImagePreviewUrl);
     sourceImagePreviewUrl = "";
   }
-  sourceImagePreviewUrl = URL.createObjectURL(file);
   sourceImageEl = new Image();
-  sourceImageEl.src = sourceImagePreviewUrl;
+  if (previewableInBrowser) {
+    sourceImagePreviewUrl = URL.createObjectURL(file);
+    sourceImageEl.src = sourceImagePreviewUrl;
+  }
 
   // Show file name in upload zone
   const uploadTitle = el("uploadTitle");
   const uploadSub = el("uploadSub");
   const uploadIcon = el("uploadIcon");
-  if (uploadTitle) uploadTitle.textContent = file.name;
-  if (uploadSub) uploadSub.textContent = `${(file.size / 1024).toFixed(0)} KB · ${file.type}`;
+  const uploadZone = el("uploadZone");
+  const uploadFormatBadges = el("uploadFormatBadges");
+  const showRasterInUploadZone = isRasterUploadPreviewType(file) && !!sourceImagePreviewUrl;
+
+  if (uploadTitle) uploadTitle.textContent = showRasterInUploadZone ? "Imagem importada" : file.name;
+  if (uploadSub) uploadSub.textContent = `${(file.size / 1024).toFixed(0)} KB · ${uploadTypeLabel(file)}`;
   if (uploadIcon) {
-    uploadIcon.innerHTML = '<span class="material-symbols-outlined text-2xl" style="font-variation-settings: \'FILL\' 1;">image</span>';
-    uploadIcon.className = uploadIcon.className.replace("text-primary", "text-tertiary");
+    if (showRasterInUploadZone) {
+      uploadIcon.classList.add("hidden");
+    } else {
+      uploadIcon.classList.remove("hidden");
+      uploadIcon.innerHTML = '<span class="material-symbols-outlined text-2xl" style="font-variation-settings: \'FILL\' 1;">image</span>';
+      uploadIcon.className = uploadIcon.className.replace("text-primary", "text-tertiary");
+    }
+  }
+  if (uploadFormatBadges) {
+    uploadFormatBadges.classList.toggle("hidden", showRasterInUploadZone);
+  }
+  if (uploadZone) {
+    if (showRasterInUploadZone) {
+      uploadZone.style.backgroundImage = `url("${sourceImagePreviewUrl}")`;
+      uploadZone.style.backgroundSize = "contain";
+      uploadZone.style.backgroundPosition = "center";
+      uploadZone.style.backgroundRepeat = "no-repeat";
+      uploadZone.style.backgroundColor = "#0c0e11";
+    } else {
+      uploadZone.style.backgroundImage = "";
+      uploadZone.style.backgroundSize = "";
+      uploadZone.style.backgroundPosition = "";
+      uploadZone.style.backgroundRepeat = "";
+      uploadZone.style.backgroundColor = "";
+    }
   }
 
   // Show image preview in canvas (editor view)
   if (editorPreview) {
-    editorPreview.src = URL.createObjectURL(file);
-    editorPreview.classList.remove("hidden");
-    if (canvasPlaceholder) canvasPlaceholder.classList.add("hidden");
+    if (previewableInBrowser && sourceImagePreviewUrl) {
+      editorPreview.src = sourceImagePreviewUrl;
+      editorPreview.classList.remove("hidden");
+      if (canvasPlaceholder) canvasPlaceholder.classList.add("hidden");
+    } else {
+      editorPreview.src = "";
+      editorPreview.classList.add("hidden");
+      if (canvasPlaceholder) canvasPlaceholder.classList.remove("hidden");
+      setStatus("Arquivo vetorial carregado. A pré-visualização será exibida após a perfuração.", "info");
+    }
   }
 }
 
@@ -1205,6 +1305,7 @@ function doReset() {
   btnReset.disabled = true;
   qualityAlert.classList.add("hidden");
   autoPunchModel = null;
+  smartAutoQualityFirstRunDone = false;
   underlayBackupByObjectId.clear();
   setAutoUnderlayToggleUI(true);
   objectsEditor.innerHTML = "";
@@ -1222,11 +1323,22 @@ function doReset() {
   const uploadTitle = el("uploadTitle");
   const uploadSub = el("uploadSub");
   const uploadIcon = el("uploadIcon");
+  const uploadZone = el("uploadZone");
+  const uploadFormatBadges = el("uploadFormatBadges");
   if (uploadTitle) uploadTitle.textContent = "Enviar Nova Imagem";
-  if (uploadSub) uploadSub.textContent = "Arraste e solte seu arquivo PNG, SVG ou AI aqui para digitalização automática";
+  if (uploadSub) uploadSub.textContent = "Arraste e solte seu arquivo PNG, SVG, AI ou CDR aqui para digitalização automática";
   if (uploadIcon) {
+    uploadIcon.classList.remove("hidden");
     uploadIcon.innerHTML = '<span class="material-symbols-outlined text-2xl">cloud_upload</span>';
     uploadIcon.className = uploadIcon.className.replace("text-tertiary", "text-primary");
+  }
+  if (uploadFormatBadges) uploadFormatBadges.classList.remove("hidden");
+  if (uploadZone) {
+    uploadZone.style.backgroundImage = "";
+    uploadZone.style.backgroundSize = "";
+    uploadZone.style.backgroundPosition = "";
+    uploadZone.style.backgroundRepeat = "";
+    uploadZone.style.backgroundColor = "";
   }
 
   updateFooterStats(0);
@@ -1314,24 +1426,15 @@ hoopSizeRange?.addEventListener("input", () => {
 });
 
 autoPreviewEnabledInput?.addEventListener("change", () => {
-  const enabled = !!autoPreviewEnabledInput.checked;
-  saveUiSettings({ autoPreviewEnabled: enabled });
-  if (!enabled && autoPreviewTimer) {
-    clearTimeout(autoPreviewTimer);
-    autoPreviewTimer = null;
-  }
-  setStatus(enabled ? "Preview automático habilitado." : "Preview automático desabilitado.", "info");
+  // Rascunho no modal: persistência ocorre apenas ao clicar em Salvar.
 });
 
 autoQualityEnabledInput?.addEventListener("change", () => {
-  const enabled = !!autoQualityEnabledInput.checked;
-  saveUiSettings({ autoQualityEnabled: enabled });
-  if (enabled) {
-    applyMarketQualityDefaults();
-    setStatus("Qualidade automática habilitada.", "info");
-  } else {
-    setStatus("Qualidade automática desabilitada.", "info");
-  }
+  // Rascunho no modal: persistência ocorre apenas ao clicar em Salvar.
+});
+
+fabricProfileInput?.addEventListener("change", () => {
+  // Rascunho no modal: persistência ocorre apenas ao clicar em Salvar.
 });
 
 btnTogglePropsPanel?.addEventListener("click", () => {
@@ -1438,11 +1541,16 @@ objectsEditor?.addEventListener("change", ev => {
 el("image")?.addEventListener("change", async e => {
   const file = e.target.files?.[0];
   if (!file) return;
+  if (!isSupportedUploadFile(file)) {
+    e.target.value = "";
+    setStatus("Formato não suportado. Use PNG/JPG/SVG/AI/CDR.", "error");
+    return;
+  }
   await handleFileSelected(file);
 });
 
 // Perfuração Automática
-btnAutoPunch?.addEventListener("click", async () => {
+async function handleAutoPunchClick() {
   if (requestInFlight) {
     setStatus("Aguarde a conclusão da ação em andamento.", "info");
     return;
@@ -1460,13 +1568,21 @@ btnAutoPunch?.addEventListener("click", async () => {
     return;
   }
 
-  applyMarketQualityDefaults();
+  const runSmartFirstPass = isAutoQualityEnabled() && !smartAutoQualityFirstRunDone;
+  if (runSmartFirstPass) {
+    // Aplica defaults automáticos somente na primeira perfuração inteligente.
+    applyMarketQualityDefaults();
+  }
 
   const fd = new FormData();
   fd.append("image", imageFile);
   fd.append("colors", el("colors").value);
   fd.append("detail", el("detail").value);
   fd.append("quality_preset", el("qualityPreset").value);
+  fd.append("size_cm", el("sizeCm")?.value || "20");
+  const fabricProfile = loadUiSettings().fabricProfile || "brim";
+  fd.append("fabric_profile", String(fabricProfile));
+  fd.append("smart_first_pass", runSmartFirstPass ? "true" : "false");
 
   setStatus("Executando perfuração automática...", "info");
   requestInFlight = true;
@@ -1484,7 +1600,10 @@ btnAutoPunch?.addEventListener("click", async () => {
     }
 
     autoPunchModel = await res.json();
-    applyAutoPunchRecommendations(autoPunchModel?.analysis);
+    if (runSmartFirstPass) {
+      applyAutoPunchRecommendations(autoPunchModel?.analysis);
+      smartAutoQualityFirstRunDone = true;
+    }
     renderObjectsEditor();
 
     const objects = autoPunchModel?.analysis?.objects || [];
@@ -1506,13 +1625,13 @@ btnAutoPunch?.addEventListener("click", async () => {
     btnAutoPunch.disabled = false;
     btnAutoPunch.innerHTML = '<span class="material-symbols-outlined text-[16px]">auto_fix_high</span> Perfuração Automática';
   }
-});
+}
 
 // Toolbox "Auto-Digitalizar" button
 el("btnToolAutoPunch")?.addEventListener("click", () => {
   if (requestInFlight) return;
   switchToDashView();
-  setTimeout(() => btnAutoPunch?.click(), 100);
+  setTimeout(() => { handleAutoPunchClick(); }, 100);
 });
 
 // Inspector "Gerar Arquivo de Máquina" button
@@ -1543,7 +1662,7 @@ inspObjectTree?.addEventListener("mouseout", (ev) => {
 });
 
 // Form Submit (Converter)
-form.addEventListener("submit", async e => {
+form?.addEventListener("submit", async e => {
   e.preventDefault();
   try {
     await runConvert({ silent: false });
@@ -1554,9 +1673,12 @@ form.addEventListener("submit", async e => {
 });
 
 // API Settings listeners
-btnApiSettings?.addEventListener("click", openApiSettings);
 btnCloseApiSettings?.addEventListener("click", closeApiSettings);
-btnCancelApiSettings?.addEventListener("click", closeApiSettings);
+btnCancelApiSettings?.addEventListener("click", () => {
+  // Cancela alterações do modal e restaura os valores persistidos.
+  loadSavedApiBase();
+  closeApiSettings();
+});
 btnSaveApiSettings?.addEventListener("click", saveApiBase);
 
 apiBaseInput?.addEventListener("keydown", ev => {
@@ -1581,6 +1703,7 @@ el("btnNovaDig")?.addEventListener("click", () => {
 
 // ── Init ─────────────────────────────────────────────────────
 const initialUiSettings = loadUiSettings();
+loadSavedApiBase();
 applyProTipsVisibility(!!initialUiSettings.hideProTips);
 setInspectorWidth(initialUiSettings.inspectorWidth);
 setInspectorCollapsed(!!initialUiSettings.inspectorCollapsed);
@@ -1588,6 +1711,11 @@ applyPreviewZoom(initialUiSettings.previewZoomPct);
 applyHoopSize(initialUiSettings.hoopSizePx);
 setPropsPanelCollapsed(!!initialUiSettings.propsPanelCollapsed);
 if (autoPreviewEnabledInput) autoPreviewEnabledInput.checked = !!initialUiSettings.autoPreviewEnabled;
+
+// Exposição explícita para fallbacks inline no HTML.
+window.openApiSettings = openApiSettings;
+window.handleAutoPunchClick = handleAutoPunchClick;
+
 switchInspTab("props");
 
 switchToDashView();
