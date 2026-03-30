@@ -123,9 +123,6 @@ const stageTitle    = el("stageTitle");
 const stagePercent  = el("stagePercent");
 const stageBarFill  = el("stageBarFill");
 const stageSubtext  = el("stageSubtext");
-const stageTitleCompact = el("stageTitleCompact");
-const stagePercentCompact = el("stagePercentCompact");
-const stageBarFillCompact = el("stageBarFillCompact");
 const recentProjectsGrid = el("recentProjectsGrid");
 const objectPreviewPopup = el("objectPreviewPopup");
 const objectPreviewImage = el("objectPreviewImage");
@@ -492,9 +489,6 @@ function setStageProgress(stage, value, subtext) {
   if (stagePercent) stagePercent.textContent = `${safeValue.toFixed(0)}%`;
   if (stageBarFill) stageBarFill.style.width = `${safeValue}%`;
   if (stageSubtext) stageSubtext.textContent = subtext;
-  if (stageTitleCompact) stageTitleCompact.textContent = stage;
-  if (stagePercentCompact) stagePercentCompact.textContent = `${safeValue.toFixed(0)}%`;
-  if (stageBarFillCompact) stageBarFillCompact.style.width = `${safeValue}%`;
 }
 
 function beginStageProgress(stage) {

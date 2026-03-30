@@ -2494,19 +2494,24 @@ def convert_image_to_embroidery(
                 overlap_px = max(1, int(round(outline_overlap_mm / max(mm_per_px, 1e-6))))
                 outline_src = _dilate_n(outline_src, overlap_px)
 
+            # Modo "só contorno" precisa de traço simples e contínuo.
+            outline_type = _normalize_outline_type(obj.get("outline_type", global_outline_type))
+            if not fill_enabled:
+                outline_type = "running"
+
             # Melhoria 5: outline gerado UMA VEZ - adicionado após fill (TRIM → outline, mesmo thread)
             outline_segments = _vector_outline_segments(
                 outline_src,
                 mm_per_px=mm_per_px,
                 step_mm=max(step_obj_mm * global_outline_mult, 0.18),
-                outline_type=_normalize_outline_type(obj.get("outline_type", global_outline_type)),
+                outline_type=outline_type,
                 width_mm=float(obj.get("outline_width_mm", global_outline_width_mm)),
                 pull_comp_mm=float(obj.get("outline_pull_comp_mm", global_outline_pull_comp_mm)),
             )
         else:
             outline_segments = []
         
-        if not segments:
+        if not segments and not outline_segments:
             continue
 
         # troca de cor (exceto primeira)

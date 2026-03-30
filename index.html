@@ -195,11 +195,10 @@
           <p class="text-[11px] font-semibold text-on-surface">Preview automático</p>
           <p class="text-[10px] text-outline">Atualiza a pré-visualização após editar propriedades.</p>
         </div>
-        <label class="inline-flex items-center cursor-pointer">
+        <label class="relative inline-flex items-center w-9 h-5 cursor-pointer">
           <input id="autoPreviewEnabled" type="checkbox" class="sr-only peer" checked>
-          <span class="relative w-9 h-5 bg-outline-variant rounded-full peer-checked:bg-primary transition-colors">
-            <span class="absolute top-0.5 left-0.5 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
-          </span>
+          <span class="absolute inset-0 rounded-full bg-outline-variant transition-colors duration-200 peer-checked:bg-primary"></span>
+          <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-4"></span>
         </label>
       </div>
       <div class="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2">
@@ -207,11 +206,10 @@
           <p class="text-[11px] font-semibold text-on-surface">Configurar qualidade automaticamente</p>
           <p class="text-[10px] text-outline">Seleciona parâmetros para acabamento de alta qualidade conforme a imagem.</p>
         </div>
-        <label class="inline-flex items-center cursor-pointer">
+        <label class="relative inline-flex items-center w-9 h-5 cursor-pointer">
           <input id="autoQualityEnabled" type="checkbox" class="sr-only peer" checked>
-          <span class="relative w-9 h-5 bg-outline-variant rounded-full peer-checked:bg-primary transition-colors">
-            <span class="absolute top-0.5 left-0.5 h-4 w-4 bg-white rounded-full transition-transform peer-checked:translate-x-4"></span>
-          </span>
+          <span class="absolute inset-0 rounded-full bg-outline-variant transition-colors duration-200 peer-checked:bg-primary"></span>
+          <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-4"></span>
         </label>
       </div>
       <div>
@@ -324,17 +322,6 @@
         <span class="material-symbols-outlined text-[18px]">layers</span>
         <span class="text-[9px] font-medium">Objetos</span>
       </button>
-    </div>
-    <div class="mt-auto w-full px-2 pt-4">
-      <div class="rounded border border-outline-variant/20 bg-surface-container-low px-2 py-2">
-        <div class="text-center mb-1">
-          <span id="stageTitleCompact" class="text-[8px] uppercase tracking-widest text-outline">Aguardando</span>
-          <span id="stagePercentCompact" class="block text-[9px] text-primary">0%</span>
-        </div>
-        <div class="h-1 w-full bg-surface-container-lowest rounded overflow-hidden">
-          <div id="stageBarFillCompact" class="h-full w-0 bg-gradient-to-r from-primary to-primary-container transition-all duration-300"></div>
-        </div>
-      </div>
     </div>
   </aside>
 
