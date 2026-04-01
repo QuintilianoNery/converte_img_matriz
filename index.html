@@ -295,6 +295,35 @@
     </div>
   </aside>
 
+  <!-- EDITOR SIDEBAR (hidden initially) -->
+  <aside id="editorSidebar" class="hidden flex-shrink-0 w-64 bg-[#1a1c1f] border-r border-[#414754]/15 flex flex-col py-6 px-4 gap-1 overflow-y-auto">
+    <div class="mb-4 px-2">
+      <h3 class="font-headline font-bold text-[10px] uppercase tracking-widest text-outline">Espaço de Trabalho</h3>
+    </div>
+    <a id="sidebarMeusProjetos2" href="#" onclick="switchToDashView(event)"
+      class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">dashboard</span> Meus Projetos
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">share</span> Compartilhados comigo
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">library_books</span> Biblioteca de Presets
+    </a>
+    <div class="mt-auto flex flex-col gap-2 pt-6">
+      <div class="p-4 bg-surface-container rounded-xl border border-outline-variant/10">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] font-bold text-outline uppercase">Converter</span>
+          <span class="text-[10px] text-primary">0%</span>
+        </div>
+        <div class="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-primary to-primary-container w-0 transition-all duration-300"></div>
+        </div>
+        <p class="text-[9px] text-outline mt-2">Sem processamento em execução.</p>
+      </div>
+    </div>
+  </aside>
+
   <!-- EDITOR TOOLBOX SIDEBAR (hidden initially) -->
   <aside id="editorToolbox" class="flex-shrink-0 w-24 bg-[#1a1c1f] border-r border-[#414754]/15 flex-col items-center py-4 overflow-y-auto hidden">
     <div class="mb-5 text-center">

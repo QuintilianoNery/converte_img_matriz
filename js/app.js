@@ -134,6 +134,7 @@ const uploadMainSection = el("uploadMainSection");
 // View elements
 const dashView       = el("dashView");
 const dashSidebar    = el("dashSidebar");
+const editorSidebar  = el("editorSidebar");
 const editorToolbox  = el("editorToolbox");
 const editorInspector = el("editorInspector");
 const navPainel      = el("navPainel");
@@ -175,6 +176,7 @@ function switchToDashView(e) {
   editorCard.classList.add("hidden");
 
   dashSidebar.classList.remove("hidden");
+  editorSidebar.classList.add("hidden");
   editorToolbox.classList.add("hidden");
   editorInspector.classList.add("hidden");
 
@@ -195,6 +197,7 @@ function switchToEditorView(e) {
   editorCard.classList.remove("hidden");
 
   dashSidebar.classList.add("hidden");
+  editorSidebar.classList.remove("hidden");
   editorToolbox.classList.remove("hidden");
   editorToolbox.style.display = "flex";
   editorInspector.classList.remove("hidden");
