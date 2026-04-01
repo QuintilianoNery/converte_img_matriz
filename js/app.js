@@ -7,7 +7,7 @@
 // Todas as funcionalidades originais + integração com novo layout
 // ============================================================
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "https://converte-img-matriz.onrender.com/";
 const API_BASE_STORAGE_KEY = "converter.apiBaseUrl";
 
 const FILL_OPTIONS = [
