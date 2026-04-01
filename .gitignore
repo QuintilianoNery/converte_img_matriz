@@ -9,7 +9,7 @@ venv/
 # Outputs/temp
 server/temp/
 server/output/
-
+img/
 # OS
 .DS_Store
 Thumbs.db

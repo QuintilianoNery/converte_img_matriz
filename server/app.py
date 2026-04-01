@@ -5,7 +5,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -19,6 +19,30 @@ TEMP_DIR = BASE_DIR / "temp"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
+
+SUPPORTED_UPLOAD_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".gif",
+    ".svg",
+    ".ai",
+    ".cdr",
+}
+
+
+def _validate_upload_file(upload: UploadFile):
+    ext = Path(upload.filename or "").suffix.lower()
+    if ext and ext in SUPPORTED_UPLOAD_EXTENSIONS:
+        return
+    if upload.content_type and upload.content_type.startswith("image/"):
+        return
+    allowed = ", ".join(sorted(SUPPORTED_UPLOAD_EXTENSIONS))
+    raise HTTPException(status_code=400, detail=f"Formato de arquivo não suportado. Use: {allowed}")
 
 app = FastAPI(title="Image → Embroidery Converter")
 
@@ -77,6 +101,8 @@ async def convert(
     quality_preset: str = Form("medio"),
     design_config: str | None = Form(None),
 ):
+    _validate_upload_file(image)
+
     job_id = str(uuid.uuid4())
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -94,16 +120,19 @@ async def convert(
             parsed_design_config = None
 
     # converter
-    preview_path, out_path, meta = convert_image_to_embroidery(
-        input_image_path=input_path,
-        out_dir=job_dir,
-        size_cm=size_cm,
-        out_format=format,
-        num_colors=colors,
-        detail=detail,
-        design_config=parsed_design_config,
-        quality_preset=quality_preset,
-    )
+    try:
+        preview_path, out_path, meta = convert_image_to_embroidery(
+            input_image_path=input_path,
+            out_dir=job_dir,
+            size_cm=size_cm,
+            out_format=format,
+            num_colors=colors,
+            detail=detail,
+            design_config=parsed_design_config,
+            quality_preset=quality_preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
         "job_id": job_id,
@@ -119,7 +148,12 @@ async def autopunch(
     colors: int = Form(12),
     detail: str = Form("medium"),
     quality_preset: str = Form("medio"),
+    size_cm: int = Form(20),
+    fabric_profile: str = Form("brim"),
+    smart_first_pass: bool = Form(True),
 ):
+    _validate_upload_file(image)
+
     job_id = str(uuid.uuid4())
     job_dir = OUTPUT_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -128,12 +162,18 @@ async def autopunch(
     with input_path.open("wb") as f:
         f.write(await image.read())
 
-    analysis = analyze_image_for_autopunch(
-        input_image_path=input_path,
-        num_colors=colors,
-        detail=detail,
-        quality_preset=quality_preset,
-    )
+    try:
+        analysis = analyze_image_for_autopunch(
+            input_image_path=input_path,
+            num_colors=colors,
+            detail=detail,
+            quality_preset=quality_preset,
+            size_cm=size_cm,
+            fabric_profile=fabric_profile,
+            smart_first_pass=smart_first_pass,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
         "job_id": job_id,

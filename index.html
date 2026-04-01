@@ -1,246 +1,930 @@
-<!doctype html>
-<html lang="pt-BR">
+<!DOCTYPE html>
+<html class="dark" lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Converter imagem → Matriz de bordado</title>
-  <link rel="stylesheet" href="css/style.css" />
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StitchMaster Pro | Central de Projetos</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "surface": "#111316",
+          "tertiary-container": "#009fb1",
+          "on-tertiary": "#00363d",
+          "tertiary": "#45d8ed",
+          "outline-variant": "#414754",
+          "surface-variant": "#333538",
+          "surface-container-low": "#1a1c1f",
+          "on-primary-container": "#002e3a",
+          "primary-fixed": "#b7eaff",
+          "on-surface": "#e2e2e6",
+          "surface-container-high": "#282a2d",
+          "error-container": "#93000a",
+          "primary": "#4cd6ff",
+          "secondary": "#b4cad6",
+          "background": "#111316",
+          "surface-container": "#1e2023",
+          "outline": "#8b90a0",
+          "on-error": "#690005",
+          "error": "#ffb4ab",
+          "on-background": "#e2e2e6",
+          "on-primary": "#003543",
+          "surface-bright": "#37393d",
+          "primary-container": "#009dc1",
+          "on-surface-variant": "#c1c6d7",
+          "surface-container-highest": "#333538",
+          "surface-dim": "#111316",
+          "surface-container-lowest": "#0c0e11",
+          "on-error-container": "#ffdad6",
+          "secondary-container": "#374c56"
+        },
+        fontFamily: {
+          "headline": ["Manrope"],
+          "body": ["Inter"],
+          "label": ["Inter"]
+        },
+        borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+      },
+    },
+  }
+</script>
+<style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    display: inline-block; line-height: 1;
+    text-transform: none; letter-spacing: normal; word-wrap: normal; white-space: nowrap; direction: ltr;
+  }
+  .canvas-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(65,71,84,.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(65,71,84,.1) 1px, transparent 1px);
+  }
+  .canvas-subgrid {
+    background-size: 8px 8px;
+    background-image: linear-gradient(to right, rgba(65,71,84,.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(65,71,84,.05) 1px, transparent 1px);
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #414754; border-radius: 10px; }
+
+  /* Object editor styles */
+  .objItem { border: 1px solid rgba(65,71,84,.3); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .objItem.hiddenByFilter { display: none; }
+  .objHead { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; background: rgba(30,32,35,.8); list-style: none; }
+  .objHead::-webkit-details-marker { display: none; }
+  .objHeadLeft { display: flex; align-items: center; gap: 10px; }
+  .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(255,255,255,.2); flex-shrink: 0; }
+  .objBody { padding: 14px; background: rgba(17,19,22,.6); }
+  .objGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .objField { display: flex; flex-direction: column; gap: 4px; }
+  .objField label { font-size: 10px; color: #8b90a0; text-transform: uppercase; letter-spacing: .05em; }
+  .objField select, .objField input[type=number] {
+    background: #0c0e11; border: 1px solid rgba(65,71,84,.5); color: #e2e2e6;
+    border-radius: 6px; padding: 6px 8px; font-size: 12px; width: 100%;
+  }
+  .objField input[type=color] { width: 100%; height: 34px; border-radius: 6px; border: 1px solid rgba(65,71,84,.5); cursor: pointer; background: transparent; }
+  .paletteItem { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .paletteMeta { font-size: 11px; color: #c1c6d7; min-width: 120px; }
+  .paletteItem input[type=color] { width: 48px; height: 28px; border-radius: 4px; border: 1px solid rgba(65,71,84,.5); cursor: pointer; background: transparent; }
+
+  /* Status colors */
+  .status-ok { color: #45d8ed; }
+  .status-error { color: #ffb4ab; }
+  .status-info { color: #b4cad6; }
+
+  /* Inspector custom select */
+  .inspector-select {
+    width: 100%; background: #0c0e11 !important; border: 1px solid rgba(65,71,84,.4) !important;
+    color: #e2e2e6 !important; border-radius: 6px; padding: 8px 10px; font-size: 11px;
+  }
+  .inspector-input {
+    width: 100%; background: #0c0e11 !important; border: 1px solid rgba(65,71,84,.4) !important;
+    color: #e2e2e6 !important; border-radius: 6px; padding: 8px 10px; font-size: 11px;
+  }
+  
+  /* Custom slider */
+  .custom-range { -webkit-appearance: none; width: 100%; height: 4px; background: #414754; border-radius: 2px; outline: none; }
+  .custom-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #4cd6ff; border: 2px solid #111316; cursor: pointer; }
+
+  /* Upload drag state */
+  .upload-zone.drag-over { border-color: #4cd6ff !important; background: rgba(76,214,255,.05) !important; }
+
+  /* Transition for views */
+  #dashView, #editorView { transition: opacity .2s; }
+
+  /* Force hidden attribute to win over Tailwind display classes (e.g. flex/block). */
+  [hidden] { display: none !important; }
+
+  #editorInspector {
+    width: 360px;
+    min-width: 280px;
+    max-width: 760px;
+    transition: width .2s ease;
+  }
+  #editorInspector.inspector-collapsed {
+    width: 44px !important;
+    min-width: 44px !important;
+  }
+  #editorInspector.inspector-collapsed #inspectorContentArea,
+  #editorInspector.inspector-collapsed #inspectorHeaderText {
+    display: none;
+  }
+  #editorInspector.inspector-collapsed #btnInspectorCollapse .material-symbols-outlined {
+    transform: rotate(180deg);
+  }
+  #inspectorResizeHandle {
+    position: absolute;
+    left: -3px;
+    top: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+  }
+  #inspectorResizeHandle:hover {
+    background: rgba(76,214,255,.2);
+  }
+  .label-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .label-info .material-symbols-outlined {
+    font-size: 12px;
+    color: #8b90a0;
+    cursor: help;
+  }
+  .field-help {
+    display: block;
+    margin-top: 2px;
+    font-size: 9px;
+    color: #8b90a0;
+    line-height: 1.35;
+  }
+</style>
 </head>
-<body>
-  <main class="container">
-    <header class="header">
-      <div class="headerTop">
-        <div>
-          <h1>Converter imagem → matriz de bordado</h1>
-          <p class="sub">
-            Envie uma imagem em <strong>alta qualidade</strong>. Imagens pequenas podem perder detalhes e gerar costura ruim.
-          </p>
-        </div>
-        <button class="gearBtn" type="button" id="btnApiSettings" aria-label="Configurar API" title="Configurar API">
-          &#9881;
-        </button>
-      </div>
-      <div class="alert" id="qualityAlert" hidden>
-        Atenção: a imagem parece ter resolução baixa. Use uma imagem maior/mais nítida.
-      </div>
-    </header>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 overflow-hidden h-screen flex flex-col">
 
-    <div class="settingsBackdrop" id="apiSettingsBackdrop" hidden>
-      <section class="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="apiSettingsTitle" aria-describedby="apiSettingsDesc">
-        <div class="settingsHead">
-          <h3 id="apiSettingsTitle">Configuração de API</h3>
-          <button type="button" class="settingsClose" id="btnCloseApiSettings" aria-label="Fechar">x</button>
-        </div>
-        <p class="muted" id="apiSettingsDesc">Configure aqui o backend local ou hospedado.</p>
-        <label class="field" for="apiBase">
-          <span>API (backend)</span>
-          <input id="apiBase" type="text" placeholder="https://seu-backend.exemplo.com" />
-          <small>Local: <code>http://127.0.0.1:8000</code> - Hospedado: URL do seu servidor.</small>
-        </label>
-        <div class="settingsActions">
-          <button class="btn secondary" type="button" id="btnCancelApiSettings">Cancelar</button>
-          <button class="btn" type="button" id="btnSaveApiSettings">Salvar</button>
-        </div>
-      </section>
+<!-- ============================================================ -->
+<!-- API SETTINGS MODAL                                           -->
+<!-- ============================================================ -->
+<div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-start justify-end p-6" id="apiSettingsBackdrop" hidden>
+  <div class="w-full max-w-md bg-surface-container border border-outline-variant/30 rounded-xl shadow-2xl p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h3 class="font-headline font-bold text-sm text-on-surface">Configuração de API</h3>
+        <p class="text-[10px] text-outline mt-0.5">Configure o backend local ou hospedado.</p>
+      </div>
+      <button id="btnCloseApiSettings" class="p-1.5 hover:bg-surface-container-high rounded transition-colors text-on-surface-variant">
+        <span class="material-symbols-outlined text-sm">close</span>
+      </button>
     </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-[10px] uppercase tracking-widest text-outline mb-2">URL DO BACKEND (API)</label>
+        <input id="apiBase" type="text" placeholder="https://seu-backend.exemplo.com"
+          class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded px-3 py-2 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"/>
+        <p class="text-[10px] text-outline mt-1.5">Local: <code class="text-primary">http://127.0.0.1:8000</code></p>
+      </div>
+      <div class="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2">
+        <div>
+          <p class="text-[11px] font-semibold text-on-surface">Preview automático</p>
+          <p class="text-[10px] text-outline">Atualiza a pré-visualização após editar propriedades.</p>
+        </div>
+        <label class="relative inline-flex items-center w-9 h-5 cursor-pointer">
+          <input id="autoPreviewEnabled" type="checkbox" class="sr-only peer" checked>
+          <span class="absolute inset-0 rounded-full bg-outline-variant transition-colors duration-200 peer-checked:bg-primary"></span>
+          <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-4"></span>
+        </label>
+      </div>
+      <div class="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2">
+        <div>
+          <p class="text-[11px] font-semibold text-on-surface">Configurar qualidade automaticamente</p>
+          <p class="text-[10px] text-outline">Seleciona parâmetros para acabamento de alta qualidade conforme a imagem.</p>
+        </div>
+        <label class="relative inline-flex items-center w-9 h-5 cursor-pointer">
+          <input id="autoQualityEnabled" type="checkbox" class="sr-only peer" checked>
+          <span class="absolute inset-0 rounded-full bg-outline-variant transition-colors duration-200 peer-checked:bg-primary"></span>
+          <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-4"></span>
+        </label>
+      </div>
+      <div>
+        <label class="block text-[10px] uppercase tracking-widest text-outline mb-2">Perfil de tecido</label>
+        <select id="fabricProfile" class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded px-3 py-2 text-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all">
+          <option value="brim" selected>Brim / sarja (estável)</option>
+          <option value="malha">Malha (elástico)</option>
+          <option value="toalha">Toalha / felpudo</option>
+          <option value="jeans">Jeans / denim</option>
+        </select>
+        <p class="text-[10px] text-outline mt-1.5">A autoqualidade ajusta densidade, underlay e compensações conforme o tecido.</p>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button id="btnCancelApiSettings" class="flex-1 py-2 rounded text-sm font-bold bg-surface-container hover:bg-surface-container-high transition-colors text-on-surface-variant">Cancelar</button>
+        <button id="btnSaveApiSettings" class="flex-1 py-2 rounded text-sm font-bold bg-gradient-to-br from-primary to-primary-container text-on-primary hover:opacity-90 transition-opacity">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <section class="card">
-      <form id="converterForm">
-        <h3>Passo 1: Configuração base</h3>
-        <div class="grid">
-          <div class="field">
-            <label for="image">Imagem</label>
-            <input id="image" name="image" type="file" accept="image/*" required />
-            <small>Dica: prefira PNG/JPG com boa nitidez.</small>
+<!-- ============================================================ -->
+<!-- TOP NAV BAR                                                  -->
+<!-- ============================================================ -->
+<header class="bg-[#1a1c1f] border-b border-[#414754]/15 shadow-sm flex justify-between items-center w-full px-4 h-14 z-50 flex-shrink-0">
+  <div class="flex items-center gap-8">
+    <span class="text-lg font-black tracking-tighter text-primary font-headline">StitchMaster Pro</span>
+    <nav class="hidden md:flex items-center gap-1 font-headline font-bold text-sm tracking-tight h-14">
+      <a id="navPainel" href="#" onclick="switchToDashView(event)"
+        class="flex items-center h-full px-3 text-primary border-b-2 border-primary transition-colors">Painel</a>
+      <a id="navEditor" href="#" onclick="switchToEditorView(event)"
+        class="flex items-center h-full px-3 text-on-surface-variant hover:bg-surface-container-high rounded transition-colors border-b-2 border-transparent">Editor</a>
+      <a href="#" class="flex items-center h-full px-3 text-on-surface-variant hover:bg-surface-container-high rounded transition-colors">Comunidade</a>
+    </nav>
+  </div>
+  <div class="flex items-center gap-3">
+    <div class="relative">
+      <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[16px]">search</span>
+      <input id="navSearch" class="bg-surface-container-lowest border-none rounded h-8 pl-8 pr-3 text-xs w-52 focus:ring-1 focus:ring-primary transition-all text-on-surface outline-none" placeholder="Buscar projetos..." type="text"/>
+    </div>
+    <button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded transition-colors">
+      <span class="material-symbols-outlined text-[18px]">help</span>
+    </button>
+    <button id="btnApiSettings" type="button" onclick="if (window.openApiSettings) window.openApiSettings();" class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded transition-colors" title="Configurar API">
+      <span class="material-symbols-outlined text-[18px]">settings</span>
+    </button>
+    <div class="h-7 w-7 rounded-full overflow-hidden border border-outline-variant/30 bg-primary-container ml-1">
+      <div class="w-full h-full flex items-center justify-center text-on-primary text-xs font-bold">W</div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================================================ -->
+<!-- APP LAYOUT                                                   -->
+<!-- ============================================================ -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- DASHBOARD SIDEBAR -->
+  <aside id="dashSidebar" class="flex-shrink-0 w-64 bg-[#1a1c1f] border-r border-[#414754]/15 flex flex-col py-6 px-4 gap-1 overflow-y-auto">
+    <div class="mb-4 px-2">
+      <h3 class="font-headline font-bold text-[10px] uppercase tracking-widest text-outline">Espaço de Trabalho</h3>
+    </div>
+    <a id="sidebarMeusProjetos" href="#" onclick="switchToDashView(event)"
+      class="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary rounded-xl font-medium text-sm border-r-2 border-primary">
+      <span class="material-symbols-outlined text-[18px]">dashboard</span> Meus Projetos
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">share</span> Compartilhados comigo
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">library_books</span> Biblioteca de Presets
+    </a>
+    <div class="mt-auto flex flex-col gap-2 pt-6">
+      <div id="stageProgressCard" class="p-4 bg-surface-container rounded-xl border border-outline-variant/10">
+        <div class="flex items-center justify-between mb-2">
+          <span id="stageTitle" class="text-[10px] font-bold text-outline uppercase">Aguardando</span>
+          <span id="stagePercent" class="text-[10px] text-primary">0%</span>
+        </div>
+        <div class="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
+          <div id="stageBarFill" class="h-full bg-gradient-to-r from-primary to-primary-container w-0 transition-all duration-300"></div>
+        </div>
+        <p id="stageSubtext" class="text-[9px] text-outline mt-2">Sem processamento em execução.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- EDITOR SIDEBAR (hidden initially) -->
+  <aside id="editorSidebar" class="hidden flex-shrink-0 w-64 bg-[#1a1c1f] border-r border-[#414754]/15 flex flex-col py-6 px-4 gap-1 overflow-y-auto">
+    <div class="mb-4 px-2">
+      <h3 class="font-headline font-bold text-[10px] uppercase tracking-widest text-outline">Espaço de Trabalho</h3>
+    </div>
+    <a id="sidebarMeusProjetos2" href="#" onclick="switchToDashView(event)"
+      class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">dashboard</span> Meus Projetos
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">share</span> Compartilhados comigo
+    </a>
+    <a href="#" class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:bg-surface-container-highest rounded-xl font-medium text-sm transition-all">
+      <span class="material-symbols-outlined text-[18px]">library_books</span> Biblioteca de Presets
+    </a>
+    <div class="mt-auto flex flex-col gap-2 pt-6">
+      <div class="p-4 bg-surface-container rounded-xl border border-outline-variant/10">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[10px] font-bold text-outline uppercase">Converter</span>
+          <span class="text-[10px] text-primary">0%</span>
+        </div>
+        <div class="h-1.5 w-full bg-surface-container-lowest rounded-full overflow-hidden">
+          <div class="h-full bg-gradient-to-r from-primary to-primary-container w-0 transition-all duration-300"></div>
+        </div>
+        <p class="text-[9px] text-outline mt-2">Sem processamento em execução.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- EDITOR TOOLBOX SIDEBAR (hidden initially) -->
+  <aside id="editorToolbox" class="flex-shrink-0 w-24 bg-[#1a1c1f] border-r border-[#414754]/15 flex-col items-center py-4 overflow-y-auto hidden">
+    <div class="mb-5 text-center">
+      <span class="block text-[9px] uppercase tracking-widest text-primary font-bold">FERRAMENTAS</span>
+      <span class="text-[8px] text-outline">V0.1.0</span>
+    </div>
+    <div class="flex flex-col gap-1 w-full px-2">
+      <button id="toolSelect" class="flex flex-col items-center justify-center py-3 gap-1 rounded transition-all bg-primary/10 text-primary border-r-2 border-primary">
+        <span class="material-symbols-outlined text-[18px]" style="font-variation-settings:'FILL' 1">near_me</span>
+        <span class="text-[9px] font-medium">Selecionar</span>
+      </button>
+      <button class="flex flex-col items-center justify-center py-3 gap-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all">
+        <span class="material-symbols-outlined text-[18px]">zoom_in</span>
+        <span class="text-[9px] font-medium">Zoom</span>
+      </button>
+      <button class="flex flex-col items-center justify-center py-3 gap-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all">
+        <span class="material-symbols-outlined text-[18px]">straighten</span>
+        <span class="text-[9px] font-medium">Medir</span>
+      </button>
+      <button id="btnToolAutoPunch" class="flex flex-col items-center justify-center py-3 gap-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all">
+        <span class="material-symbols-outlined text-[18px]">auto_fix_high</span>
+        <span class="text-[9px] font-medium text-center leading-tight">Auto-Digit.</span>
+      </button>
+      <button class="flex flex-col items-center justify-center py-3 gap-1 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-all">
+        <span class="material-symbols-outlined text-[18px]">layers</span>
+        <span class="text-[9px] font-medium">Objetos</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="mainContent" class="flex-1 overflow-y-auto bg-surface">
+    <form id="converterForm">
+
+      <!-- ====================================================== -->
+      <!-- DASHBOARD VIEW                                          -->
+      <!-- ====================================================== -->
+      <div id="dashView" class="p-8">
+
+        <!-- Dashboard Header -->
+        <div class="flex justify-between items-end mb-8">
+          <div>
+            <h1 class="font-headline font-extrabold text-3xl text-on-surface mb-1">Central de Projetos</h1>
+            <p class="text-on-surface-variant text-sm">Bem-vindo de volta, Weaver. Pronto para seu próximo ponto?</p>
           </div>
-
-          <div class="field">
-            <label for="sizeCm">Tamanho</label>
-            <select id="sizeCm" name="sizeCm">
-              <option value="10">10 cm</option>
-              <option value="20">20 cm</option>
-              <option value="30">30 cm</option>
-            </select>
-            <small>Mesma proporção (escala automática).</small>
+          <div class="flex gap-3">
+            <button type="button" class="flex items-center gap-2 px-4 py-2 bg-surface-container hover:bg-surface-container-high text-on-surface rounded-xl text-sm font-bold transition-all border border-outline-variant/20">
+              <span class="material-symbols-outlined text-[16px]">filter_list</span> Filtrar
+            </button>
+            <button type="button" id="btnNovaDig" class="flex items-center gap-2 px-5 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary rounded font-bold text-sm shadow-lg shadow-primary/10 hover:opacity-90 transition-all">
+              <span class="material-symbols-outlined text-[18px]">add</span> Nova Digitalização
+            </button>
           </div>
-
-          <div class="field">
-            <label for="format">Formato de saída</label>
-            <select id="format" name="format">
-              <option value="PES" selected>.PES (Brother/Babylock)</option>
-              <option value="DST">.DST (Tajima)</option>
-              <option value="JEF">.JEF (Janome)</option>
-              <option value="EXP">.EXP</option>
-              <option value="VP3">.VP3</option>
-              <option value="HUS">.HUS</option>
-              <!-- E3D: não suportado nesta versão (é nativo do Embird) -->
-            </select>
-            <small class="muted">E3D não é suportado nesta versão.</small>
-          </div>
-
-          <div class="field">
-            <label for="colors">Cores (quantização)</label>
-            <select id="colors" name="colors">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-              <option value="6">6</option>
-              <option value="7">7</option>
-              <option value="8">8</option>
-              <option value="9">9</option>
-              <option value="10">10</option>
-              <option value="11">11</option>
-              <option value="12">12</option>
-              <option value="13">13</option>
-              <option value="14">14</option>
-              <option value="15">15</option>
-              <option value="16" selected>16</option>
-              <option value="17">17</option>
-              <option value="18">18</option>
-              <option value="19">19</option>
-              <option value="20">20</option>
-              <option value="21">21</option>
-              <option value="22">22</option>
-              <option value="23">23</option>
-              <option value="24">24</option>
-            </select>
-            <small>Mais cores = mais trocas de linha.</small>
-          </div>
-
-          <div class="field">
-            <label for="detail">Detalhe</label>
-            <select id="detail" name="detail">
-              <option value="low">Baixo (mais leve)</option>
-              <option value="medium" selected>Médio (padrão)</option>
-              <option value="high">Alto (mais denso)</option>
-            </select>
-            <small>Alto = mais pontos/arquivo maior.</small>
-          </div>
-
-          <div class="field">
-            <label for="qualityPreset">Preset de qualidade</label>
-            <select id="qualityPreset" name="qualityPreset">
-              <option value="leve">Leve</option>
-              <option value="medio" selected>Médio</option>
-              <option value="premium">Premium</option>
-              <option value="premium_clean">Premium Clean</option>
-            </select>
-            <small>Controla contorno, compensação e equilíbrio de densidade.</small>
-          </div>
-
         </div>
 
-        <div class="actions">
-          <button class="btn secondary" type="button" id="btnAutoPunch">Perfuração automática</button>
+        <!-- Quality Alert -->
+        <div id="qualityAlert" class="hidden mb-6 flex items-center gap-3 px-4 py-3 bg-error-container/20 border border-error/30 rounded-xl text-sm text-error">
+          <span class="material-symbols-outlined text-[18px]">warning</span>
+          Atenção: a imagem parece ter resolução baixa. Use uma imagem maior/mais nítida para melhores resultados.
         </div>
 
-        <section class="card inner" id="editorCard" hidden>
-          <h3>Passo 2: Ajustar objetos</h3>
-          <p class="muted">Edite objeto por objeto: cor, tipo de preenchimento, densidade, compensação e sob-costura.</p>
-          <div class="bulkPanel">
-            <h4>Ajuste rápido global</h4>
-            <div class="objGrid bulkGrid">
-              <label class="field">
-                <span>Preenchimento</span>
-                <select id="bulkFillType"></select>
-              </label>
-              <label class="field">
-                <span>Densidade</span>
-                <select id="bulkDensity">
-                  <option value="low">Baixa</option>
-                  <option value="medium" selected>Média</option>
-                  <option value="high">Alta</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Sob-costura</span>
-                <select id="bulkUnderlay">
-                  <option value="low">Baixa</option>
-                  <option value="medium" selected>Média</option>
-                  <option value="high">Alta</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Compensação (mm)</span>
-                <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" />
-              </label>
-              <label class="field">
-                <span>Tipo de contorno</span>
-                <select id="bulkOutlineType"></select>
-              </label>
-              <label class="field">
-                <span>Largura contorno (mm)</span>
-                <input id="bulkOutlineWidth" type="number" min="0.5" max="4" step="0.1" value="1.5" />
-              </label>
-              <label class="field">
-                <span>Pull comp contorno (mm)</span>
-                <input id="bulkOutlinePull" type="number" min="0" max="0.8" step="0.1" value="0.3" />
-              </label>
-              <label class="field">
-                <span>Overlap contorno (mm)</span>
-                <input id="bulkOutlineOverlap" type="number" min="0" max="1" step="0.1" value="0.4" />
-              </label>
+        <!-- Main Grid: Upload + Tips -->
+        <div class="grid grid-cols-12 gap-6 mb-8">
+
+          <!-- Upload Area -->
+          <section id="uploadMainSection" class="col-span-12 lg:col-span-8">
+            <div id="uploadZone" class="upload-zone relative group cursor-pointer h-[220px] rounded-xl border-2 border-dashed border-outline-variant/30 bg-surface-container-low flex flex-col items-center justify-center transition-all hover:border-primary/50 hover:bg-surface-container overflow-hidden"
+              onclick="document.getElementById('image').click()">
+              <div class="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <div id="uploadIcon" class="mb-3 h-14 w-14 bg-surface-container-lowest rounded-full flex items-center justify-center text-primary border border-outline-variant/10 shadow-xl">
+                <span class="material-symbols-outlined text-2xl">cloud_upload</span>
+              </div>
+              <h2 id="uploadTitle" class="font-headline font-bold text-lg text-on-surface mb-1">Enviar Nova Imagem</h2>
+              <p id="uploadSub" class="text-on-surface-variant text-xs mb-4 text-center px-8">Arraste e solte seu arquivo PNG, SVG, AI ou CDR aqui para digitalização automática</p>
+              <div id="uploadFormatBadges" class="flex gap-3">
+                <span class="text-[9px] font-bold text-outline-variant uppercase tracking-widest px-3 py-1 bg-surface-container-lowest rounded border border-outline-variant/10">PNG</span>
+                <span class="text-[9px] font-bold text-outline-variant uppercase tracking-widest px-3 py-1 bg-surface-container-lowest rounded border border-outline-variant/10">SVG</span>
+                <span class="text-[9px] font-bold text-outline-variant uppercase tracking-widest px-3 py-1 bg-surface-container-lowest rounded border border-outline-variant/10">JPG</span>
+                <span class="text-[9px] font-bold text-outline-variant uppercase tracking-widest px-3 py-1 bg-surface-container-lowest rounded border border-outline-variant/10">CDR</span>
+              </div>
+              <input id="image" name="image" type="file" accept="image/*,.svg,.ai,.cdr" required class="hidden"/>
             </div>
-            <div class="editorActions">
-              <button class="btn secondary" type="button" id="btnApplyBulk">Aplicar em todos</button>
+
+            <!-- Configuration Grid -->
+            <div class="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Tamanho
+                  <span class="material-symbols-outlined" title="Define o tamanho final do bordado em centímetros.">info</span>
+                </label>
+                <span class="field-help">Área final aproximada do desenho na peça.</span>
+                <select id="sizeCm" name="sizeCm" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                  <option value="10">10 cm</option>
+                  <option value="20">20 cm</option>
+                  <option value="30">30 cm</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Formato de Saída
+                  <span class="material-symbols-outlined" title="Escolhe o formato compatível com a máquina de bordado.">info</span>
+                </label>
+                <span class="field-help">Use o formato indicado pelo fabricante da máquina.</span>
+                <select id="format" name="format" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                  <option value="PES" selected>.PES (Brother/Babylock)</option>
+                  <option value="DST">.DST (Tajima)</option>
+                  <option value="JEF">.JEF (Janome)</option>
+                  <option value="EXP">.EXP</option>
+                  <option value="VP3">.VP3</option>
+                  <option value="HUS">.HUS</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Cores (quantização)
+                  <span class="material-symbols-outlined" title="Quantidade de cores que o sistema tentará preservar no bordado.">info</span>
+                </label>
+                <span class="field-help">Mais cores preservam detalhes e aumentam complexidade.</span>
+                <select id="colors" name="colors" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                  <!-- Populated by JS -->
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Detalhe
+                  <span class="material-symbols-outlined" title="Controla o nível de detalhamento dos pontos gerados.">info</span>
+                </label>
+                <span class="field-help">Alto detalhe gera mais pontos e melhor definição.</span>
+                <select id="detail" name="detail" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                  <option value="low">Baixo (mais leve)</option>
+                  <option value="medium" selected>Médio (padrão)</option>
+                  <option value="high">Alto (mais denso)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] uppercase tracking-widest text-outline mb-1.5 label-info">Preset de Qualidade
+                  <span class="material-symbols-outlined" title="Aplica um conjunto de parâmetros de bordado pronto para uso.">info</span>
+                </label>
+                <span class="field-help">Premium/Clean busca acabamento de mercado.</span>
+                <select id="qualityPreset" name="qualityPreset" class="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none">
+                  <option value="leve">Leve</option>
+                  <option value="medio" selected>Médio</option>
+                  <option value="premium">Premium</option>
+                  <option value="premium_clean">Premium Clean</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-6 flex flex-wrap gap-3 items-center">
+              <button type="button" id="btnAutoPunch" onclick="if (window.handleAutoPunchClick) window.handleAutoPunchClick();"
+                class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm rounded hover:opacity-90 transition-all shadow-lg shadow-primary/10">
+                <span class="material-symbols-outlined text-[16px]">auto_fix_high</span>
+                Perfuração Automática
+              </button>
+              <button type="button" id="btnReset" disabled
+                class="flex items-center gap-2 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container-high rounded text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+                Limpar
+              </button>
+            </div>
+
+            <!-- Status -->
+            <div id="status" class="mt-4 text-xs font-medium min-h-[20px]"></div>
+
+            <!-- Result Card (download) -->
+            <div id="resultCard" class="hidden mt-6 p-5 bg-surface-container rounded-xl border border-outline-variant/20">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="material-symbols-outlined text-primary">check_circle</span>
+                <h3 class="font-headline font-bold text-sm text-on-surface">Conversão Concluída</h3>
+              </div>
+              <div class="mb-4 rounded-lg overflow-hidden border border-outline-variant/20 bg-surface-container-lowest">
+                <img id="previewImg" alt="Prévia do bordado" class="w-full max-h-64 object-contain"/>
+              </div>
+              <div class="flex gap-3">
+                <a id="downloadBtn" href="#" download
+                  class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm rounded hover:opacity-90 transition-all">
+                  <span class="material-symbols-outlined text-[16px]">download</span>
+                  Baixar Arquivo
+                </a>
+              </div>
+              <details class="mt-4">
+                <summary class="text-[10px] text-outline cursor-pointer hover:text-on-surface-variant transition-colors uppercase tracking-widest">Detalhes técnicos</summary>
+                <pre id="meta" class="mt-2 text-[10px] text-on-surface-variant font-mono bg-surface-container-lowest rounded p-3 overflow-x-auto"></pre>
+              </details>
+            </div>
+          </section>
+
+          <!-- Pro Tips Panel -->
+          <section id="proTipsSection" class="col-span-12 lg:col-span-4">
+            <div class="bg-surface-container h-full rounded-xl p-5 border border-outline-variant/10 flex flex-col">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-headline font-bold text-base flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[18px]">lightbulb</span>
+                  Dicas Profissionais
+                </h3>
+                <button id="btnHideProTips" type="button" class="text-[10px] uppercase tracking-widest text-outline hover:text-on-surface transition-colors">
+                  Fechar
+                </button>
+              </div>
+              <div class="space-y-3 flex-1">
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant/5">
+                  <span class="material-symbols-outlined text-tertiary text-[18px] flex-shrink-0">check_circle</span>
+                  <div>
+                    <h4 class="text-xs font-bold text-on-surface">Contraste é Fundamental</h4>
+                    <p class="text-[10px] text-on-surface-variant mt-1 leading-relaxed">Alto contraste entre o objeto e o fundo resulta em caminhos 40% mais limpos.</p>
+                  </div>
+                </div>
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant/5">
+                  <span class="material-symbols-outlined text-tertiary text-[18px] flex-shrink-0">check_circle</span>
+                  <div>
+                    <h4 class="text-xs font-bold text-on-surface">Preferência por Vetor</h4>
+                    <p class="text-[10px] text-on-surface-variant mt-1 leading-relaxed">Use arquivos SVG para designs geométricos para manter simetria perfeita em qualquer escala.</p>
+                  </div>
+                </div>
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant/5">
+                  <span class="material-symbols-outlined text-tertiary text-[18px] flex-shrink-0">check_circle</span>
+                  <div>
+                    <h4 class="text-xs font-bold text-on-surface">Mapeamento de Linhas</h4>
+                    <p class="text-[10px] text-on-surface-variant mt-1 leading-relaxed">Limite seu design a 8 cores para o desempenho mais eficiente da máquina.</p>
+                  </div>
+                </div>
+                <div class="flex gap-3 p-3 rounded-lg bg-surface-container-low border border-outline-variant/5">
+                  <span class="material-symbols-outlined text-tertiary text-[18px] flex-shrink-0">check_circle</span>
+                  <div>
+                    <h4 class="text-xs font-bold text-on-surface">E3D Não Suportado</h4>
+                    <p class="text-[10px] text-on-surface-variant mt-1 leading-relaxed">O formato .E3D não é suportado nesta versão (nativo do Embird).</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Recent Projects (decorative) -->
+        <section>
+          <div class="flex items-center justify-between mb-5">
+            <h3 class="font-headline font-bold text-lg">Projetos Recentes</h3>
+            <a href="#" class="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
+              Ver Todos <span class="material-symbols-outlined text-xs">chevron_right</span>
+            </a>
+          </div>
+          <div id="recentProjectsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-xl border border-outline-variant/10 bg-surface-container-low text-[11px] text-outline">
+              Nenhum projeto convertido ainda.
             </div>
           </div>
-
-          <div class="editorTopBar">
-            <label class="field filterField">
-              <span>Buscar objeto</span>
-              <input id="objectFilter" type="text" placeholder="Ex: c3_o2" />
-            </label>
-            <div class="objMeta" id="objectsCount"></div>
-          </div>
-
-          <div class="palettePanel">
-            <h4>Paleta de cores quantizadas</h4>
-            <p class="muted">Aqui aparece 1 seletor por cor detectada. Se escolher 1 cor no Passo 1, aparece apenas 1 seletor.</p>
-            <div id="paletteEditor" class="paletteEditor"></div>
-          </div>
-
-          <div class="editorActions">
-            <button class="btn secondary" type="button" id="btnExpandAll">Expandir tudo</button>
-            <button class="btn secondary" type="button" id="btnCollapseAll">Recolher tudo</button>
-          </div>
-          <div id="objectsEditor" class="objectsEditor"></div>
         </section>
+      </div>
 
-        <div class="actions">
-          <button class="btn" type="submit" id="btnConvert">Passo 3: Converter</button>
-          <button class="btn secondary" type="button" id="btnReset" disabled>Limpar</button>
+      <!-- ====================================================== -->
+      <!-- EDITOR VIEW (editorCard)                               -->
+      <!-- ====================================================== -->
+      <div id="editorCard" class="hidden flex flex-col" style="min-height: calc(100vh - 3.5rem - 2.5rem);">
+
+        <!-- Editor Canvas Zone -->
+        <div class="flex-shrink-0 relative canvas-grid canvas-subgrid flex items-center justify-center bg-surface overflow-hidden" style="min-height: 420px; max-height: 420px;">
+          <div class="absolute inset-0 canvas-subgrid opacity-40"></div>
+          <!-- Hoop overlay -->
+          <div id="hoopOverlay" class="relative flex items-center justify-center border-2 border-dashed border-tertiary/20 rounded-full bg-tertiary/5" style="width: 460px; height: 460px;">
+            <div id="canvasInner" class="relative bg-surface-container-high rounded shadow-2xl overflow-hidden flex items-center justify-center" style="width: 320px; height: 320px;">
+              <!-- Preview placeholder -->
+              <div id="canvasPlaceholder" class="flex flex-col items-center gap-2 text-outline">
+                <span class="material-symbols-outlined text-4xl">texture</span>
+                <p class="text-[10px] uppercase tracking-widest">Aguardando imagem</p>
+              </div>
+              <img id="editorPreview" src="" alt="Preview" class="hidden w-full h-full object-contain"/>
+              <!-- Thread path overlay -->
+              <svg class="absolute inset-0 w-full h-full opacity-30 pointer-events-none" viewBox="0 0 100 100">
+                <path d="M20,50 Q40,20 50,50 T80,50" fill="none" stroke="#4cd6ff" stroke-dasharray="1 1" stroke-width="0.5"/>
+                <path d="M30,30 Q50,10 70,30 T90,60" fill="none" stroke="#45d8ed" stroke-dasharray="0.5 0.5" stroke-width="0.3"/>
+              </svg>
+            </div>
+          </div>
+          <!-- Zoom controls -->
+          <div class="absolute bottom-3 left-3 bg-surface-container-highest/90 backdrop-blur px-2 py-1 rounded border border-outline-variant/20 flex items-center gap-2">
+            <span class="text-[9px] uppercase tracking-widest text-outline">Zoom</span>
+            <input id="previewZoomRange" type="range" min="50" max="300" step="5" value="100" class="w-28 custom-range"/>
+            <span id="previewZoomPct" class="text-[9px] font-mono text-on-surface-variant w-10 text-right">100%</span>
+          </div>
+          <div class="absolute bottom-12 left-3 bg-surface-container-highest/90 backdrop-blur px-2 py-1 rounded border border-outline-variant/20 flex items-center gap-2">
+            <span class="text-[9px] uppercase tracking-widest text-outline">Hoop</span>
+            <input id="hoopSizeRange" type="range" min="320" max="620" step="10" value="460" class="w-28 custom-range"/>
+            <span id="hoopSizePx" class="text-[9px] font-mono text-on-surface-variant w-12 text-right">460px</span>
+          </div>
+          <div class="absolute bottom-3 right-3 bg-surface-container-highest/80 backdrop-blur px-2 py-0.5 rounded text-[9px] text-on-surface-variant font-mono">
+            <span id="previewZoomBadge">100% VISOR</span>
+          </div>
+          <!-- Back button -->
+          <button type="button" onclick="switchToDashView(event)"
+            class="absolute top-3 left-3 flex items-center gap-1.5 px-3 py-1.5 bg-surface-container/80 backdrop-blur hover:bg-surface-container-high border border-outline-variant/20 rounded-lg text-xs font-bold text-on-surface-variant transition-all">
+            <span class="material-symbols-outlined text-[14px]">arrow_back</span>
+            Painel
+          </button>
         </div>
 
-        <div class="status" id="status"></div>
-      </form>
-    </section>
+        <!-- Editor Controls Area -->
+        <div class="flex-1 overflow-y-auto p-6 bg-surface">
+          <!-- Editor Action Buttons -->
+          <div class="flex flex-wrap gap-3 items-center pb-4">
+            <button type="button" id="btnReset2"
+              class="flex items-center gap-2 px-4 py-2.5 text-on-surface-variant hover:bg-surface-container-high rounded text-sm transition-all">
+              <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+              Novo Projeto
+            </button>
+            <!-- Status inside editor -->
+            <span id="statusEditor" class="text-xs font-medium"></span>
+          </div>
 
-    <section class="card" id="resultCard" hidden>
-      <h2>Prévia</h2>
-      <div class="previewWrap">
-        <img id="previewImg" alt="Prévia do bordado" />
-      </div>
+          <!-- Result Card in Editor View -->
+          <div id="resultCardEditor" class="hidden p-5 bg-surface-container rounded-xl border border-primary/20 mb-4 max-w-md">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="material-symbols-outlined text-primary">check_circle</span>
+              <h3 class="font-headline font-bold text-sm text-on-surface">Arquivo Gerado com Sucesso!</h3>
+            </div>
+            <div class="flex gap-3 justify-start">
+              <a id="downloadBtnEditor" href="#" download
+                class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm rounded hover:opacity-90 transition-all">
+                <span class="material-symbols-outlined text-[16px]">download</span>
+                Baixar Arquivo da Máquina
+              </a>
+            </div>
+          </div>
 
-      <div class="actions">
-        <a class="btn" id="downloadBtn" href="#" download>Baixar arquivo</a>
-      </div>
+        </div>
+      </div><!-- /editorCard -->
 
-      <details class="details">
-        <summary>Detalhes</summary>
-        <pre id="meta"></pre>
-      </details>
-    </section>
-
-    <footer class="footer">
-      <p class="muted">
-        Fluxo: perfuração automática → edição de objetos → conversão.
-      </p>
-    </footer>
+    </form>
   </main>
 
-  <script src="js/app.js"></script>
+  <!-- EDITOR INSPECTOR (right panel) -->
+  <aside id="editorInspector" class="hidden flex-shrink-0 bg-[#1e2023] border-l border-[#414754]/15 flex-col relative">
+    <div id="inspectorResizeHandle" title="Arraste para redimensionar"></div>
+    <div class="p-3 border-b border-outline-variant/15 flex items-center justify-between gap-2">
+      <div id="inspectorHeaderText">
+        <h2 class="font-headline font-bold text-sm tracking-tight text-on-surface">Inspetor</h2>
+        <p class="text-[9px] text-outline uppercase tracking-widest">Propriedades</p>
+      </div>
+      <button id="btnInspectorCollapse" type="button" class="p-1.5 rounded hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Minimizar/Expandir propriedades">
+        <span class="material-symbols-outlined text-sm">chevron_right</span>
+      </button>
+    </div>
+    <div id="inspectorContentArea" class="flex-1 flex flex-col min-h-0">
+    <!-- Inspector Tabs -->
+    <nav class="flex border-b border-outline-variant/10">
+      <button onclick="switchInspTab('props', this)" id="inspTabProps"
+        class="py-3 text-[10px] font-bold text-primary border-b border-primary flex-1 transition-colors">Propriedades <span class="material-symbols-outlined align-middle text-[10px]" title="Configurações globais e edição dos objetos.">info</span></button>
+      <button onclick="switchInspTab('stitch', this)" id="inspTabStitch"
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Ponto <span class="material-symbols-outlined align-middle text-[10px]" title="Ajustes de densidade e compensação dos pontos.">info</span></button>
+      <button onclick="switchInspTab('fill', this)" id="inspTabFill"
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Preench. <span class="material-symbols-outlined align-middle text-[10px]" title="Configuração do tipo e espessura de preenchimento/contorno.">info</span></button>
+      <button onclick="switchInspTab('layers', this)" id="inspTabLayers"
+        class="py-3 text-[10px] text-on-surface-variant hover:text-on-surface flex-1 transition-colors">Camadas</button>
+    </nav>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-5">
+
+      <!-- Tab: Properties -->
+      <div id="inspPanelProps" class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="text-[10px] uppercase tracking-widest text-outline">Propriedades Avançadas</h4>
+          <button id="btnTogglePropsPanel" type="button" class="p-1 rounded hover:bg-surface-container-high text-on-surface-variant transition-colors" title="Expandir/Recolher">
+            <span id="propsPanelChevron" class="material-symbols-outlined text-sm">expand_less</span>
+          </button>
+        </div>
+        <div id="propsPanelBody" class="space-y-4">
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <h4 class="font-headline font-bold text-xs text-on-surface mb-3 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[14px]">tune</span>
+            Ajustes Globais
+          </h4>
+          <div class="grid grid-cols-1 gap-2">
+            <div class="objField">
+              <label class="label-info">Preenchimento
+                <span class="material-symbols-outlined" title="Define o padrão de preenchimento principal das áreas.">info</span>
+              </label>
+              <select id="bulkFillType" class="inspector-select"></select>
+            </div>
+            <div class="objField">
+              <label class="label-info">Densidade
+                <span class="material-symbols-outlined" title="Controla o espaçamento entre linhas de ponto.">info</span>
+              </label>
+              <select id="bulkDensity" class="inspector-select">
+                <option value="low">Baixa</option>
+                <option value="medium" selected>Média</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <div class="objField">
+              <label class="label-info">Sob-costura
+                <span class="material-symbols-outlined" title="Camada de base que melhora estabilidade e acabamento.">info</span>
+              </label>
+              <select id="bulkUnderlay" class="inspector-select">
+                <option value="none">Desligada</option>
+                <option value="low">Baixa</option>
+                <option value="medium" selected>Média</option>
+                <option value="high">Alta</option>
+              </select>
+            </div>
+            <div class="objField">
+              <label class="label-info">Compensação (mm)
+                <span class="material-symbols-outlined" title="Compensa encolhimento do tecido no bordado.">info</span>
+              </label>
+              <input id="bulkShrink" type="number" min="0" max="2" step="0.1" value="0.4" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label class="label-info">Tipo de Contorno
+                <span class="material-symbols-outlined" title="Escolhe o estilo de ponto para bordas do desenho.">info</span>
+              </label>
+              <select id="bulkOutlineType" class="inspector-select"></select>
+            </div>
+            <div class="objField">
+              <label class="label-info">Largura Contorno (mm)
+                <span class="material-symbols-outlined" title="Espessura visual das bordas em milímetros.">info</span>
+              </label>
+              <input id="bulkOutlineWidth" type="number" min="0.5" max="4" step="0.1" value="1.5" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label class="label-info">Pull Comp (mm)
+                <span class="material-symbols-outlined" title="Compensa tração lateral do tecido durante costura.">info</span>
+              </label>
+              <input id="bulkOutlinePull" type="number" min="0" max="0.8" step="0.1" value="0.3" class="inspector-input"/>
+            </div>
+            <div class="objField">
+              <label class="label-info">Overlap (mm)
+                <span class="material-symbols-outlined" title="Sobreposição entre áreas para evitar falhas visuais.">info</span>
+              </label>
+              <input id="bulkOutlineOverlap" type="number" min="0" max="1" step="0.1" value="0.4" class="inspector-input"/>
+            </div>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <button type="button" id="btnApplyBulk" class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded text-[10px] font-bold transition-all border border-primary/20">
+              Aplicar em Todos
+            </button>
+            <button type="submit" id="btnConvert" class="flex items-center gap-1 px-3 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-[10px] rounded hover:opacity-90 transition-all">
+              <span class="material-symbols-outlined text-[12px]">sync</span>
+              Converter
+            </button>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <h4 class="font-headline font-bold text-xs text-on-surface mb-2 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-[14px]">palette</span>
+            Paleta de Cores Quantizadas
+          </h4>
+          <p class="text-[10px] text-outline mb-3">Ajuste as cores por grupo detectado.</p>
+          <div id="paletteEditor" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-surface-container border border-outline-variant/10">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-headline font-bold text-xs text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-primary text-[14px]">account_tree</span>
+              Objetos de Design
+            </h4>
+            <div id="objectsCount" class="text-[10px] text-outline"></div>
+          </div>
+          <div class="mb-2 flex items-center gap-2">
+            <div class="relative flex-1">
+              <span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-outline text-[12px]">search</span>
+              <input id="objectFilter" type="text" placeholder="Buscar objeto"
+                class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg pl-7 pr-2 py-1.5 text-[10px] text-on-surface focus:ring-1 focus:ring-primary outline-none"/>
+            </div>
+            <button type="button" id="btnExpandAll" class="px-2 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high rounded border border-outline-variant/20">+</button>
+            <button type="button" id="btnCollapseAll" class="px-2 py-1.5 text-[10px] font-bold text-on-surface-variant hover:bg-surface-container-high rounded border border-outline-variant/20">-</button>
+          </div>
+          <div id="objectsEditor"></div>
+        </div>
+        </div>
+      </div>
+
+      <!-- Tab: Stitch Settings -->
+      <div id="inspPanelStitch" class="hidden">
+        <div class="space-y-2 mb-4">
+          <label class="block text-[10px] uppercase tracking-widest text-outline label-info">Tipo de Ponto
+            <span class="material-symbols-outlined" title="Seleciona o estilo principal de costura do preenchimento.">info</span>
+          </label>
+          <select id="inspFillType" class="inspector-select"></select>
+        </div>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex justify-between items-center">
+            <label class="text-[10px] uppercase tracking-widest text-outline label-info">Densidade
+              <span class="material-symbols-outlined" title="Ajusta compactação dos pontos para cobertura e textura.">info</span>
+            </label>
+            <span id="inspDensityVal" class="text-xs font-mono text-primary">0.40mm</span>
+          </div>
+          <input id="inspDensityRange" type="range" class="custom-range" min="1" max="10" value="4" oninput="document.getElementById('inspDensityVal').textContent = (this.value * 0.1).toFixed(2) + 'mm'"/>
+        </div>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex justify-between items-center">
+            <label class="text-[10px] uppercase tracking-widest text-outline label-info">Compensação de Encolhimento
+              <span class="material-symbols-outlined" title="Corrige deformação do tecido após aplicação dos pontos.">info</span>
+            </label>
+            <span id="inspShrinkVal" class="text-xs font-mono text-primary">0.15mm</span>
+          </div>
+          <input id="inspShrinkRange" type="range" class="custom-range" min="0" max="20" value="3" oninput="document.getElementById('inspShrinkVal').textContent = (this.value * 0.05).toFixed(2) + 'mm'"/>
+        </div>
+
+        <div class="flex items-center justify-between p-3 rounded-lg bg-surface-container-low/50 border border-outline-variant/10 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-on-surface-variant text-sm">layers_clear</span>
+            <span class="text-xs font-medium">Gerar Sob-costura Automaticamente</span>
+          </div>
+          <button
+            type="button"
+            id="inspAutoUnderlayToggle"
+            class="w-9 h-5 bg-primary rounded-full relative cursor-pointer transition-colors"
+            role="switch"
+            aria-checked="true"
+            aria-label="Gerar Sob-costura Automaticamente"
+          >
+            <span
+              id="inspAutoUnderlayThumb"
+              class="absolute left-0.5 top-0.5 w-4 h-4 bg-surface rounded-full transition-transform transform translate-x-4"
+            ></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab: Fill Types -->
+      <div id="inspPanelFill" class="hidden space-y-4">
+        <div>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Tipo de Preenchimento
+            <span class="material-symbols-outlined" title="Estilo de trama para preencher áreas internas.">info</span>
+          </label>
+          <select id="inspFillType2" class="inspector-select"></select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Tipo de Contorno
+            <span class="material-symbols-outlined" title="Define o desenho do ponto aplicado nas bordas.">info</span>
+          </label>
+          <select id="inspOutlineType" class="inspector-select"></select>
+        </div>
+        <div>
+          <label class="block text-[10px] uppercase tracking-widest text-outline mb-2 label-info">Largura do Contorno (mm)
+            <span class="material-symbols-outlined" title="Aumenta ou reduz espessura da borda do desenho.">info</span>
+          </label>
+          <input id="inspOutlineWidth" type="number" value="1.5" step="0.1" min="0.5" max="4" class="inspector-input"/>
+        </div>
+      </div>
+
+      <!-- Tab: Layers / Object Tree -->
+      <div id="inspPanelLayers" class="hidden">
+        <label class="block text-[10px] uppercase tracking-widest text-outline mb-3">Árvore de Objetos</label>
+        <div id="inspObjectTree" class="space-y-1 max-h-[52vh] overflow-y-auto pr-1">
+          <div class="flex items-center gap-3 p-2 rounded-lg bg-primary/10 border-l-2 border-primary">
+            <span class="material-symbols-outlined text-primary text-sm">account_tree</span>
+            <div class="flex-1">
+              <p class="text-[10px] font-bold text-on-surface">Fundo do Logo</p>
+              <p class="text-[9px] text-outline">Pontos: —</p>
+            </div>
+            <span class="material-symbols-outlined text-outline text-xs">visibility</span>
+          </div>
+          <p class="text-[10px] text-outline mt-3 text-center">Execute a perfuração automática para ver os objetos aqui.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Inspector CTA -->
+    <div class="p-4 border-t border-outline-variant/10 bg-surface-container-high/30">
+      <button type="button" id="inspBtnGenerate"
+        class="w-full py-2.5 rounded text-on-primary font-bold text-sm bg-gradient-to-br from-primary to-primary-container hover:brightness-110 active:opacity-80 transition-all">
+        Gerar Arquivo de Máquina
+      </button>
+    </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- BOTTOM STATUS BAR                                            -->
+<!-- ============================================================ -->
+<footer class="flex-shrink-0 flex justify-start items-center px-6 gap-8 bg-[#0c0e11] border-t border-[#414754]/15 h-10 z-50">
+  <div class="flex items-center gap-2 text-primary">
+    <span class="material-symbols-outlined text-sm">location_searching</span>
+    <span class="font-mono text-[9px] uppercase tracking-widest">X: 0.00 Y: 0.00</span>
+  </div>
+  <div class="flex items-center gap-2 text-on-surface-variant">
+    <span class="material-symbols-outlined text-sm">fingerprint</span>
+    <span id="barPoints" class="font-mono text-[9px] uppercase tracking-widest">PONTOS: 14.203</span>
+  </div>
+  <div class="flex items-center gap-2 text-on-surface-variant">
+    <span class="material-symbols-outlined text-sm">straighten</span>
+    <span id="barLine" class="font-mono text-[9px] uppercase tracking-widest">LINHA: 0.0M</span>
+  </div>
+  <div class="ml-auto flex items-center gap-4">
+    <div class="h-4 w-[1px] bg-outline-variant/20"></div>
+    <div class="flex items-center gap-2 text-[9px] font-mono text-on-surface-variant">
+      <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+      MÁQUINA desconectada
+    </div>
+    <span class="text-[9px] font-mono text-outline">VERSÃO 0.0.0</span>
+  </div>
+</footer>
+
+<div id="objectPreviewPopup" class="hidden fixed z-[110] w-44 rounded-lg border border-outline-variant/40 bg-surface-container-high shadow-2xl p-2 pointer-events-none">
+  <img id="objectPreviewImage" src="" alt="Prévia do objeto" class="w-full h-24 object-contain rounded border border-outline-variant/20 bg-surface-container-lowest" />
+  <p id="objectPreviewLabel" class="text-[10px] text-on-surface-variant mt-1 truncate"></p>
+</div>
+
+<script src="js/app.js?v=20260328-2"></script>
 </body>
 </html>
